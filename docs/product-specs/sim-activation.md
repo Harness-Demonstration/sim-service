@@ -14,10 +14,6 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A1 | Activating an ordered SIM publishes one `sim.activated` event with ICCID, MSISDN and the activation time from the injected Clock. | done |
 | A2 | Activating the same SIM twice publishes once. | done |
 | A3 | Activating an unknown ICCID returns 404 and publishes nothing. | done |
-| A4 | Activation writes the SIM as active and one outbox row in one transaction. If either write fails, neither is committed. | planned |
-| A5 | The relay publishes pending outbox rows in creation order and marks a row sent only after Kafka acknowledged it. | planned |
-| A6 | While Kafka is unavailable, rows stay pending and nothing is lost; they are published when Kafka is back. | planned |
-| A7 | Every `sim.activated` event carries a unique `eventId`. Delivery is at least once, so consumers drop duplicates by `eventId`. | planned |
 
 ### Persistence
 | ID | Criterion | Status |
@@ -31,4 +27,4 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | (none yet) | | |
 
 ## Decision log
-- 2026-11-10: Events are published through a transactional outbox, see [outbox](../design-docs/outbox.md). The earlier behaviour "a failed publish makes activation fail" is replaced by A6.
+- 2026-11-10: Events are published through a transactional outbox, see [outbox](../design-docs/outbox.md).
