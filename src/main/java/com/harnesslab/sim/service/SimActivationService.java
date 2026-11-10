@@ -1,23 +1,34 @@
 package com.harnesslab.sim.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.harnesslab.sim.repository.OutboxRepository;
 import com.harnesslab.sim.repository.SimRepository;
+import com.harnesslab.sim.types.OutboxEvent;
 import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
 import com.harnesslab.sim.types.SimOrdered;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SimActivationService {
 
+    static final String SIM_ACTIVATED_TOPIC = "sim.activated";
+
     private final SimRepository repository;
-    private final SimEventPublisher eventPublisher;
+    private final OutboxRepository outbox;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public SimActivationService(SimRepository repository, SimEventPublisher eventPublisher, Clock clock) {
+    public SimActivationService(
+            SimRepository repository, OutboxRepository outbox, ObjectMapper objectMapper, Clock clock) {
         this.repository = repository;
-        this.eventPublisher = eventPublisher;
+        this.outbox = outbox;
+        this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
@@ -27,14 +38,30 @@ public class SimActivationService {
         }
     }
 
-    public synchronized void activate(String iccid) {
-        Sim sim = repository.findByIccid(iccid).orElseThrow(() -> new SimNotFoundException(iccid));
+    @Transactional
+    public void activate(String iccid) {
+        Sim sim = repository.findByIccidForUpdate(iccid).orElseThrow(() -> new SimNotFoundException(iccid));
         if (sim.activatedAt() != null) {
             return;
         }
 
         Instant activatedAt = clock.instant();
-        eventPublisher.publish(new SimActivated(sim.iccid(), sim.msisdn(), activatedAt));
         repository.save(new Sim(sim.iccid(), sim.msisdn(), activatedAt));
+        UUID eventId = UUID.randomUUID();
+        outbox.save(new OutboxEvent(
+                eventId,
+                sim.iccid(),
+                SIM_ACTIVATED_TOPIC,
+                toJson(new SimActivated(eventId, sim.iccid(), sim.msisdn(), activatedAt)),
+                activatedAt,
+                null));
+    }
+
+    private String toJson(SimActivated event) {
+        try {
+            return objectMapper.writeValueAsString(event);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Cannot serialise sim.activated", exception);
+        }
     }
 }

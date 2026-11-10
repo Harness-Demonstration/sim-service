@@ -19,6 +19,11 @@ public class PostgresSimRepository implements SimRepository {
     }
 
     @Override
+    public Optional<Sim> findByIccidForUpdate(String iccid) {
+        return jpaRepository.findWithLockByIccid(iccid).map(SimEntity::toDomain);
+    }
+
+    @Override
     public void save(Sim sim) {
         jpaRepository.save(new SimEntity(sim));
     }

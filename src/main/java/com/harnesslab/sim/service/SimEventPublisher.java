@@ -1,7 +1,8 @@
 package com.harnesslab.sim.service;
 
-import com.harnesslab.sim.types.SimActivated;
+import com.harnesslab.sim.types.OutboxEvent;
 
 public interface SimEventPublisher {
-    void publish(SimActivated event);
+    /** Returns only once Kafka acknowledged the event; throws if it did not. */
+    void publish(OutboxEvent event);
 }
