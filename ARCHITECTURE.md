@@ -12,9 +12,9 @@ All code is under `com.harnesslab.sim`. Dependencies flow one way, from top to b
 |---|---|---|
 | `types` | `Sim`, `SimOrdered`, `SimActivated`: records, no logic | nothing |
 | `config` | `ClockConfiguration` and other beans | `types` |
-| `repository` | `SimRepository` (interface used by service), `PostgresSimRepository`, `SimEntity`, Spring Data interfaces | `types` |
-| `service` | `SimActivationService`: every business decision; `SimEventPublisher` (interface) | `repository`, `types` |
-| `stream` | `SimOrderedConsumer` (Kafka in), `KafkaSimEventPublisher` (Kafka out) | `service`, `types` |
+| `repository` | `SimRepository`, `OutboxRepository` (interfaces used by service), `PostgresSimRepository`, `PostgresOutboxRepository`, `SimEntity`, Spring Data interfaces | `types` |
+| `service` | `SimActivationService`: every business decision; `OutboxRelayService`; `SimEventPublisher` (interface) | `repository`, `types` |
+| `stream` | `SimOrderedConsumer` (Kafka in), `KafkaSimEventPublisher` (Kafka out), `OutboxRelay` (scheduler) | `service`, `types` |
 | `api` | `SimActivationController`, `SimExceptionHandler` | `service`, `types` |
 
 ## Invariants
@@ -27,7 +27,7 @@ Each invariant names what enforces it. A rule without an enforcer is a wish; add
 | No `JdbcTemplate`; hand-written SQL only in Flyway migrations | `LayerRulesTest.jdbc_template_is_not_used` |
 | Hibernate never creates tables; Flyway does | `spring.jpa.hibernate.ddl-auto=validate` |
 | Time comes from the injected `java.time.Clock` | review, test `a1_` (fixed clock) |
-| A state change and its event are committed together through the outbox | design doc [outbox](docs/design-docs/outbox.md); tests `a4_` to `a7_` once implemented |
+| A state change and its event are committed together through the outbox | design doc [outbox](docs/design-docs/outbox.md); tests `a4_` to `a7_` |
 
 ## Absent on purpose
 - No business logic in `stream` or `api`. If a consumer or controller needs an `if` about the domain, it belongs in `service`.

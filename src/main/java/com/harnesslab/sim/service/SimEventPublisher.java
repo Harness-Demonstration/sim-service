@@ -1,7 +1,9 @@
 package com.harnesslab.sim.service;
 
-import com.harnesslab.sim.types.SimActivated;
+import com.harnesslab.sim.types.OutboxEvent;
+import java.util.concurrent.CompletableFuture;
 
 public interface SimEventPublisher {
-    void publish(SimActivated event);
+    /** Starts sending without waiting; the future completes when Kafka acknowledged the event, or fails. */
+    CompletableFuture<Void> publish(OutboxEvent event);
 }
