@@ -23,7 +23,7 @@ Code lives in `com.harnesslab.sim`, in six packages. Dependencies flow one way.
 ## How to work
 1. Turn each acceptance criterion in the issue into a test first. Name the test after the criterion, for example `c2_activating_twice_publishes_once`.
 2. Put the decision in `service`. Controllers and consumers only translate input and call the service.
-3. Publish Kafka events from `service` through a small interface you inject, so service tests can capture events without a broker.
+3. A state change and the event it causes are written in one database transaction: update the row and insert into the `outbox` table, then commit. A separate relay publishes outbox rows to Kafka and retries until it succeeds. Never send to Kafka from `service`, and never save state first and publish afterwards: Kafka and the database cannot share a transaction, so one of the two writes can be lost.
 4. Take the current time from an injected `java.time.Clock` bean defined in `config`, never `Instant.now()`, so tests can fix the time.
 5. Run `./mvnw -q verify` before you open or update the pull request. It needs no Kafka broker.
 6. In the pull request description, list each criterion with the test that proves it.
