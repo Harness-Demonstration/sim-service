@@ -34,7 +34,7 @@ public class SimActivationService {
         }
 
         Instant activatedAt = clock.instant();
-        repository.save(new Sim(sim.iccid(), sim.msisdn(), activatedAt));
         eventPublisher.publish(new SimActivated(sim.iccid(), sim.msisdn(), activatedAt));
+        repository.save(new Sim(sim.iccid(), sim.msisdn(), activatedAt));
     }
 }

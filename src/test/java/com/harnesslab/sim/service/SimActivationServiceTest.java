@@ -1,6 +1,8 @@
 package com.harnesslab.sim.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.harnesslab.sim.repository.InMemorySimRepository;
 import com.harnesslab.sim.types.SimActivated;
@@ -20,12 +22,14 @@ class SimActivationServiceTest {
     private static final Instant ACTIVATION_TIME = Instant.parse("2026-01-02T03:04:05Z");
 
     private final List<SimActivated> events = new ArrayList<>();
+    private InMemorySimRepository repository;
     private SimActivationService service;
 
     @BeforeEach
     void setUp() {
+        repository = new InMemorySimRepository();
         service = new SimActivationService(
-                new InMemorySimRepository(),
+                repository,
                 events::add,
                 Clock.fixed(ACTIVATION_TIME, ZoneOffset.UTC));
         service.registerOrdered(new SimOrdered(ICCID, MSISDN, "order-1"));
@@ -44,5 +48,28 @@ class SimActivationServiceTest {
         service.activate(ICCID);
 
         assertEquals(List.of(new SimActivated(ICCID, MSISDN, ACTIVATION_TIME)), events);
+    }
+
+    @Test
+    void c4_failed_publish_keeps_sim_inactive_and_allows_retry() {
+        List<SimActivated> publishedEvents = new ArrayList<>();
+        int[] publishAttempts = {0};
+        SimActivationService retryableService = new SimActivationService(
+                repository,
+                event -> {
+                    if (publishAttempts[0]++ == 0) {
+                        throw new IllegalStateException("Kafka publish failed");
+                    }
+                    publishedEvents.add(event);
+                },
+                Clock.fixed(ACTIVATION_TIME, ZoneOffset.UTC));
+
+        assertThrows(IllegalStateException.class, () -> retryableService.activate(ICCID));
+        assertNull(repository.findByIccid(ICCID).orElseThrow().activatedAt());
+
+        retryableService.activate(ICCID);
+
+        assertEquals(1, publishedEvents.size());
+        assertEquals(ACTIVATION_TIME, repository.findByIccid(ICCID).orElseThrow().activatedAt());
     }
 }
