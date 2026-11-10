@@ -1,40 +1,75 @@
-# sim-service architecture
+# Architecture
 
-A map of the service, not a manual. Change it when a rule changes, not with every commit.
+This document describes the high-level architecture of sim-service. If you want to know where something is or what must stay true, start here. It is revisited a few times a year, not on every change; names below are for symbol search, not links.
 
-## What it does
-`sim-service` owns the lifecycle of a SIM card. It consumes `sim.ordered`, stores the SIM, activates it on `POST /sims/{iccid}/activate`, and publishes `sim.activated`. Billing starts charging when it sees `sim.activated`.
+## Bird's Eye View
 
-## Codemap
-All code is under `com.harnesslab.sim`. Dependencies flow one way, from top to bottom of this list.
+sim-service owns the lifecycle of a SIM card. A sold SIM arrives as a `sim.ordered` Kafka message and is stored in PostgreSQL. A client activates it over REST. The activation is announced on the `sim.activated` topic, which billing uses to start charging.
 
-| Package | Holds today | May depend on |
-|---|---|---|
-| `types` | `Sim`, `SimOrdered`, `SimActivated`: records, no logic | nothing |
-| `config` | `ClockConfiguration` and other beans | `types` |
-| `repository` | `SimRepository`, `OutboxRepository` (interfaces used by service), `PostgresSimRepository`, `PostgresOutboxRepository`, `SimEntity`, Spring Data interfaces | `types` |
-| `service` | `SimActivationService`: every business decision; `OutboxRelayService`; `SimEventPublisher` (interface) | `repository`, `types` |
-| `stream` | `SimOrderedConsumer` (Kafka in), `KafkaSimEventPublisher` (Kafka out), `OutboxRelay` (scheduler) | `service`, `types` |
-| `api` | `SimActivationController`, `SimExceptionHandler` | `service`, `types` |
+The one hard problem is that announcement: billing must never miss an activation and must never be charged for one this service does not know about. PostgreSQL and Kafka cannot share a transaction, so events leave through a transactional outbox (see `docs/design-docs/outbox.md`).
 
-## Invariants
-Each invariant names what enforces it. A rule without an enforcer is a wish; add the enforcer or remove the rule.
+## Entry Points
 
-| Invariant | Enforced by |
-|---|---|
-| `stream` and `api` never call `repository` | `LayerRulesTest.stream_and_api_do_not_call_repository` |
-| JPA types (`jakarta.persistence`) stay inside `repository`; entities never leave it | `LayerRulesTest.persistence_annotations_stay_in_repository` |
-| No `JdbcTemplate`; hand-written SQL only in Flyway migrations | `LayerRulesTest.jdbc_template_is_not_used` |
-| Hibernate never creates tables; Flyway does | `spring.jpa.hibernate.ddl-auto=validate` |
-| Time comes from the injected `java.time.Clock` | review, test `a1_` (fixed clock) |
-| A state change and its event are committed together through the outbox | design doc [outbox](docs/design-docs/outbox.md); tests `a4_` to `a7_` |
+- `SimOrderedConsumer`: Kafka listener for `sim.ordered`.
+- `SimActivationController`: `POST /sims/{iccid}/activate`.
+- `OutboxRelay`: scheduled job that publishes pending outbox rows to Kafka.
 
-## Absent on purpose
-- No business logic in `stream` or `api`. If a consumer or controller needs an `if` about the domain, it belongs in `service`.
-- No direct Kafka calls from `service`. Events leave through the outbox.
-- No calls to other services' code or databases. Other services see this one only through Kafka topics.
+## Code Map
 
-## Related
-- Criteria and their IDs: [docs/product-specs/sim-activation.md](docs/product-specs/sim-activation.md)
-- How events are published: [docs/design-docs/outbox.md](docs/design-docs/outbox.md)
-- How tests are written and named: [docs/testing.md](docs/testing.md)
+All code lives under `com.harnesslab.sim`. Dependencies point down this list: `api` and `stream` use `service`, `service` uses `repository`, everything may use `types`.
+
+### `types`
+
+Plain records shared by all layers: `Sim`, the incoming `SimOrdered`, the outgoing `SimActivated`, and `OutboxEvent`. No logic, no Spring, no JPA.
+
+### `config`
+
+Spring beans: the `Clock` used everywhere instead of `Instant.now()`, and scheduling for the relay.
+
+### `repository`
+
+Persistence behind interfaces that `service` uses: `SimRepository` and `OutboxRepository`. Implemented with Spring Data JPA; `SimEntity` and `OutboxEntity` map to tables created by Flyway migrations in `src/main/resources/db/migration`.
+
+**Architecture Invariant:** JPA types (`jakarta.persistence`) never leave this package; callers get `types` records. Enforced by `LayerRulesTest`.
+
+**Architecture Invariant:** no hand-written SQL in Java and no `JdbcTemplate`; SQL lives only in migrations. Hibernate runs with `ddl-auto=validate` and never creates tables.
+
+### `service`
+
+Every business decision. `SimActivationService` registers ordered SIMs and activates them: it locks the SIM row, sets the activation time and writes the outbox row in one transaction. `OutboxRelayService` selects pending outbox rows, hands them to a publisher and marks the acknowledged ones as sent.
+
+**Architecture Invariant:** `service` never talks to Kafka. It sees only the `SimEventPublisher` interface, implemented in `stream`.
+
+### `stream`
+
+Kafka in both directions. `SimOrderedConsumer` turns a message into a `SimOrdered` record and calls one service method. `KafkaSimEventPublisher` sends outbox payloads and returns Kafka's acknowledgement. `OutboxRelay` triggers the relay every second.
+
+**Architecture Invariant:** no business logic here, and no access to `repository`. Enforced by `LayerRulesTest`.
+
+### `api`
+
+REST. `SimActivationController` translates the request and calls the service; `SimExceptionHandler` turns `SimNotFoundException` into 404.
+
+**Architecture Invariant:** same as `stream`: no business logic, no `repository`.
+
+## Cross-Cutting Concerns
+
+### Events and delivery
+
+Every event goes through the outbox. Delivery is at least once; every `sim.activated` carries an `eventId` so consumers can drop duplicates. Changing the shape of a published message affects other services and must be called out in the pull request.
+
+### Testing
+
+Business rules are tested in `service` with in-class fakes and a fixed `Clock`. Anything that touches SQL, transactions or Kafka runs against real PostgreSQL and Kafka from Testcontainers. Naming and versions: `docs/testing.md`.
+
+### Error handling
+
+Unknown SIMs raise `SimNotFoundException`, mapped to 404. A failed Kafka send never fails an activation; the outbox row stays pending and the relay retries it.
+
+### Observability
+
+Logs only, for now. Tracing across Kafka is planned.
+
+### Configuration
+
+Database and Kafka addresses come from environment variables with local defaults (`application.yml`). The relay can be switched off with `sim.outbox.relay.enabled=false`. Local PostgreSQL, Kafka and Jaeger start from `infra/docker-compose.yml`.
