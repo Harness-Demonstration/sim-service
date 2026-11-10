@@ -13,7 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class SimServiceApplicationTest {
 
     @Container
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16")
+    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16.4")
             .withDatabaseName("sim")
             .withUsername("sim")
             .withPassword("sim");

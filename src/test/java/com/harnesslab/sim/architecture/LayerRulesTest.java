@@ -20,4 +20,15 @@ class LayerRulesTest {
             .should().dependOnClassesThat().resideInAPackage("..repository..")
             .because("decisions belong in service. FIX: move the logic into a service class, inject that service here "
                     + "and call one service method; only service may call repository.");
+
+    @ArchTest
+    static final ArchRule persistence_annotations_stay_in_repository = noClasses()
+            .that().resideOutsideOfPackage("..repository..")
+            .should().dependOnClassesThat().resideInAPackage("jakarta.persistence..")
+            .because("entities belong in repository. FIX: map entities to types records inside repository.");
+
+    @ArchTest
+    static final ArchRule jdbc_template_is_not_used = noClasses()
+            .should().dependOnClassesThat().haveFullyQualifiedName("org.springframework.jdbc.core.JdbcTemplate")
+            .because("persistence uses Spring Data JPA. FIX: use a repository interface and keep SQL in Flyway migrations.");
 }
