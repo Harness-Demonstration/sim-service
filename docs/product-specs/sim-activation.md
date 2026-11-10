@@ -6,9 +6,10 @@ Owner: SIM lifecycle team.
 A customer buys a SIM. It must be activated before it works, and billing must start charging exactly when it is activated: never before, never twice, and never missed.
 
 ## Criteria
+Behaviour only: what the service guarantees to customers and to other services. How it is built lives in `ARCHITECTURE.md` and `docs/design-docs/`.
+
 IDs never change and are never reused. A new criterion takes the next free number. Each test is named after the ID it proves, for example `a2_activating_twice_publishes_once`.
 
-### Activation
 | ID | Criterion | Status |
 |---|---|---|
 | A1 | Activating an ordered SIM publishes one `sim.activated` event with ICCID, MSISDN and the activation time from the injected Clock. | done |
@@ -19,11 +20,6 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A6 | Two running instances of the service never publish the same event at the same time. | done |
 | A7 | Every `sim.activated` event carries an `eventId` that tells it apart from a duplicate of itself, so billing can ignore duplicates. | done |
 
-### Persistence
-| ID | Criterion | Status |
-|---|---|---|
-| P1 | The `sim` table has `iccid` as primary key and `msisdn` not null. | done |
-| P2 | SIMs are saved and read back unchanged against a real PostgreSQL. | done |
 
 ## Retired criteria
 | ID | Was | Replaced by |

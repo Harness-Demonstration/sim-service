@@ -55,7 +55,7 @@ class PostgresSimRepositoryTest {
     }
 
     @Test
-    void c3_saves_and_retrieves_an_inactive_sim() {
+    void saves_and_retrieves_an_inactive_sim() {
         Sim sim = new Sim(iccid, MSISDN, null);
 
         repository.save(sim);
@@ -64,7 +64,7 @@ class PostgresSimRepositoryTest {
     }
 
     @Test
-    void c3_saves_and_retrieves_activation_time() {
+    void saves_and_retrieves_activation_time() {
         Instant activatedAt = Instant.parse("2026-01-02T03:04:05Z");
         Sim sim = new Sim(iccid, MSISDN, activatedAt);
 
@@ -74,7 +74,7 @@ class PostgresSimRepositoryTest {
     }
 
     @Test
-    void c3_saving_an_existing_iccid_updates_the_sim() {
+    void saving_an_existing_iccid_updates_the_sim() {
         repository.save(new Sim(iccid, MSISDN, null));
         Sim updated = new Sim(iccid, "491700000002", Instant.parse("2026-01-02T03:04:05Z"));
 
@@ -84,12 +84,12 @@ class PostgresSimRepositoryTest {
     }
 
     @Test
-    void c3_returns_empty_for_an_unknown_iccid() {
+    void returns_empty_for_an_unknown_iccid() {
         assertFalse(repository.findByIccid(iccid).isPresent());
     }
 
     @Test
-    void c1_schema_enforces_iccid_primary_key_and_non_null_msisdn() throws SQLException {
+    void schema_enforces_iccid_primary_key_and_non_null_msisdn() throws SQLException {
         try (var connection = dataSource.getConnection()) {
             DatabaseMetaData metadata = connection.getMetaData();
             try (ResultSet keys = metadata.getPrimaryKeys(connection.getCatalog(), "public", "sim")) {
