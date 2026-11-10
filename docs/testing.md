@@ -1,11 +1,10 @@
 # Testing in sim-service
 
 ## Naming
-- Every test that proves a criterion is named after the criterion's ID in `docs/product-specs/`, in lower case: `a2_activating_twice_publishes_once`, `p1_schema_enforces_...`.
-- IDs come from the spec file, never from the issue. Issues reference spec IDs.
-- Issues carry acceptance criteria as plain sentences, without IDs. Whoever implements the issue copies them into the spec first, with the next free IDs, then writes the tests. Criteria the implementer adds on their own are listed separately in the pull request, so the reviewer can accept or reject them.
+- A test that proves a spec criterion starts with the criterion's ID in lower case, followed by the behaviour: `a2_activating_twice_publishes_once`.
+- Only lasting behaviour goes into the spec (see the map, How to work, item 1). Acceptance criteria of one-off tasks stay in the issue; their tests are named after the behaviour, without an ID.
 - When a change makes an existing criterion wrong, retire it in the spec and delete or rewrite its test in the same pull request.
-- Tests that do not prove a criterion (wiring, smoke tests) have no prefix.
+- All other tests (technical checks, wiring, smoke tests) are named after the behaviour and have no prefix, for example `saves_and_reads_back_activation_time`.
 
 ## Kinds of tests
 | Kind | Uses | When |
