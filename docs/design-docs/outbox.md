@@ -29,9 +29,13 @@ Created by a Flyway migration.
 
 ## Relay
 - Runs on a schedule, every second.
-- In one transaction: selects up to 100 rows `WHERE sent_at IS NULL ORDER BY created_at` with `FOR UPDATE SKIP LOCKED`, publishes each, waits for Kafka's acknowledgement, sets `sent_at`, commits.
+- In one transaction: selects up to 100 rows `WHERE sent_at IS NULL ORDER BY created_at` with `FOR UPDATE SKIP LOCKED`, sends all of them to Kafka, then waits for all acknowledgements together, sets `sent_at` on the acknowledged rows, commits.
+- Send first, wait after: Kafka handles the sends in parallel, so the transaction stays open for about one round trip to Kafka, not one round trip per row. Never wait for each send before sending the next.
 - `SKIP LOCKED` lets several instances of the service run the relay at once without publishing the same row twice at the same time.
-- If a publish fails, the row keeps `sent_at = null` and the next run retries it. The relay stops the batch at the first failure so ordering per run is preserved.
+- Rows whose send failed or timed out keep `sent_at = null` and the next run retries them.
+
+### Known limit
+The transaction is still open while the relay waits for Kafka, at most the acknowledgement timeout (10 seconds). If Kafka is slow, that holds one pooled connection and the row locks for that long, and a crash before commit re-sends the whole batch. Accepted for now. The next step, if this becomes a problem, is to claim rows with a lease in one short transaction, publish outside any transaction, and mark them sent in a second short transaction.
 
 ### Where the relay code lives
 The layer rules apply. The scheduled trigger and the Kafka publisher live in `stream`. Reading and marking outbox rows is a `service` method that uses a repository. `stream` calls that service method and passes the publisher.
