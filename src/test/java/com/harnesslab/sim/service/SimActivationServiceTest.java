@@ -1,6 +1,7 @@
 package com.harnesslab.sim.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,6 +22,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -84,17 +88,65 @@ class SimActivationServiceTest {
 
         relay.relayPending(event -> {
             if (attempts[0]++ == 0) {
-                throw new IllegalStateException("Kafka down");
+                return CompletableFuture.failedFuture(new IllegalStateException("Kafka down"));
             }
             published.add(event);
+            return CompletableFuture.completedFuture(null);
         });
         assertNull(outbox.events.get(0).sentAt());
         assertEquals(List.of(), published);
 
-        assertEquals(1, relay.relayPending(published::add));
+        assertEquals(1, relay.relayPending(recording(published)));
         assertEquals(1, published.size());
         assertEquals(ACTIVATION_TIME, outbox.events.get(0).sentAt());
-        assertEquals(0, relay.relayPending(published::add));
+        assertEquals(0, relay.relayPending(recording(published)));
+    }
+
+    @Test
+    void a5_all_events_are_sent_before_any_acknowledgement_is_awaited() throws Exception {
+        service.registerOrdered(new SimOrdered("8949000000000000002", "491700000002", "order-2"));
+        service.activate(ICCID);
+        service.activate("8949000000000000002");
+        OutboxRelayService relay = new OutboxRelayService(outbox, clock);
+        List<CompletableFuture<Void>> acknowledgements = new CopyOnWriteArrayList<>();
+
+        CompletableFuture<Integer> run = CompletableFuture.supplyAsync(() -> relay.relayPending(event -> {
+            CompletableFuture<Void> acknowledgement = new CompletableFuture<>();
+            acknowledgements.add(acknowledgement);
+            return acknowledgement;
+        }));
+
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (acknowledgements.size() < 2 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+        assertEquals(2, acknowledgements.size());
+        assertFalse(run.isDone());
+        acknowledgements.forEach(acknowledgement -> acknowledgement.complete(null));
+        assertEquals(2, run.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void a5_a_failed_send_does_not_stop_the_other_events_from_being_marked_sent() {
+        service.registerOrdered(new SimOrdered("8949000000000000002", "491700000002", "order-2"));
+        service.activate(ICCID);
+        service.activate("8949000000000000002");
+        OutboxRelayService relay = new OutboxRelayService(outbox, clock);
+        int[] calls = {0};
+
+        int sent = relay.relayPending(event -> calls[0]++ == 0
+                ? CompletableFuture.failedFuture(new IllegalStateException("send failed"))
+                : CompletableFuture.completedFuture(null));
+
+        assertEquals(1, sent);
+        assertEquals(1, outbox.events.stream().filter(event -> event.sentAt() == null).count());
+    }
+
+    private static SimEventPublisher recording(List<OutboxEvent> published) {
+        return event -> {
+            published.add(event);
+            return CompletableFuture.completedFuture(null);
+        };
     }
 
     private static class TestSimRepository implements SimRepository {

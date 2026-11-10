@@ -99,13 +99,14 @@ class OutboxPersistenceTest {
     void a5_failed_publish_leaves_row_pending_and_a_later_run_sends_it() {
         service.activate(ICCID);
 
-        relay.relayPending(event -> {
-            throw new IllegalStateException("Kafka down");
-        });
+        relay.relayPending(event -> CompletableFuture.failedFuture(new IllegalStateException("Kafka down")));
         assertEquals(1, jdbc.queryForObject("select count(*) from outbox where sent_at is null", Integer.class));
 
         List<OutboxEvent> published = new ArrayList<>();
-        assertEquals(1, relay.relayPending(published::add));
+        assertEquals(1, relay.relayPending(event -> {
+            published.add(event);
+            return CompletableFuture.completedFuture(null);
+        }));
 
         assertEquals(1, published.size());
         assertEquals(0, jdbc.queryForObject("select count(*) from outbox where sent_at is null", Integer.class));
@@ -119,12 +120,15 @@ class OutboxPersistenceTest {
 
         CompletableFuture<Integer> first = CompletableFuture.supplyAsync(() -> relay.relayPending(event -> {
             firstHoldsLock.complete(null);
-            secondDone.join();
+            return secondDone;
         }));
         firstHoldsLock.get(30, TimeUnit.SECONDS);
 
         List<OutboxEvent> publishedBySecond = new ArrayList<>();
-        int sentBySecond = relay.relayPending(publishedBySecond::add);
+        int sentBySecond = relay.relayPending(event -> {
+            publishedBySecond.add(event);
+            return CompletableFuture.completedFuture(null);
+        });
         secondDone.complete(null);
 
         assertEquals(0, sentBySecond);
