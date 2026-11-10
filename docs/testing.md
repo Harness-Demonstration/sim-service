@@ -3,7 +3,7 @@
 ## Naming
 - Every test that proves a criterion is named after the criterion's ID in `docs/product-specs/`, in lower case: `a2_activating_twice_publishes_once`, `p1_schema_enforces_...`.
 - IDs come from the spec file, never from the issue. Issues reference spec IDs.
-- Issues do not carry criterion IDs. Whoever implements the issue writes its criteria into the spec first, with the next free IDs, then the tests.
+- Issues carry acceptance criteria as plain sentences, without IDs. Whoever implements the issue copies them into the spec first, with the next free IDs, then writes the tests. Criteria the implementer adds on their own are listed separately in the pull request, so the reviewer can accept or reject them.
 - When a change makes an existing criterion wrong, retire it in the spec and delete or rewrite its test in the same pull request.
 - Tests that do not prove a criterion (wiring, smoke tests) have no prefix.
 

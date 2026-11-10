@@ -16,7 +16,7 @@ Billing starts charging when it sees `sim.activated`, so that event must never b
 | Local PostgreSQL, Kafka and Jaeger | `infra/docker-compose.yml` |
 
 ## How to work
-1. Your first change is to the spec. Issues describe the task in plain words; turn that into criteria in the matching file in `docs/product-specs/`, each with the next free ID. If an existing criterion no longer holds, retire it there. The reviewer reads this spec diff before any code.
+1. Your first change is to the spec. The issue lists acceptance criteria in plain sentences; copy each into the matching file in `docs/product-specs/` with the next free ID. If you think a criterion is missing, add it too and list it in the PR under "Criteria I added". If an existing criterion no longer holds, retire it there. The reviewer reads this spec diff before any code.
 2. Write the test first and name it after the ID, for example `a2_activating_twice_publishes_once`. Details in `docs/testing.md`.
 3. Put every decision in `service`. Controllers and consumers translate input and call one service method.
 4. Publish events only through the outbox, as described in `docs/design-docs/outbox.md`. Never call Kafka from `service`.
