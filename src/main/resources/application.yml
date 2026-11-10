@@ -1,6 +1,10 @@
 spring:
   application:
     name: sim-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sim}
+    username: ${SPRING_DATASOURCE_USERNAME:sim}
+    password: ${SPRING_DATASOURCE_PASSWORD:sim}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     producer:
