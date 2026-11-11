@@ -55,7 +55,8 @@ components:
       contentType: application/octet-stream
       description: >
         Original sim.ordered value bytes and key, unchanged (including a null value).
-        Delivery is at least once; eventId identifies duplicate dead-letter deliveries.
+        Delivery is at least once; eventId identifies outbox redeliveries. Reprocessing an
+        input record after a consumer restart can create a new eventId.
       headers:
         type: object
         required: [reason, eventId]
