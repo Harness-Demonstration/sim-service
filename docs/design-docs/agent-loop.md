@@ -4,7 +4,7 @@ How work moves from an issue to a merged pull request with as little human time 
 Implemented by `.github/workflows/agent-loop.yml` and `scripts/agent-loop.sh`.
 
 ## Flow
-1. **Triage.** A person opens an issue with one of two templates. *Agent task* adds the `agent-ready` label: a well-scoped change with plain acceptance criteria. *Human task* adds `needs-human`: production-critical, security-sensitive or still unclear work. Adding `agent-ready` later has the same effect.
+1. **Triage.** A person opens an issue with one of three templates. *Agent task* adds the `agent-ready` label: a well-scoped change with plain acceptance criteria. *Agent task (strong model)* adds `agent-ready` and `model:strong` for harder changes; the labels arrive with the issue, so the model is chosen before Copilot starts. *Human task* adds `needs-human`: production-critical, security-sensitive or still unclear work. Adding `agent-ready` later has the same effect.
 2. **Assign.** An `agent-ready` issue is assigned to the Copilot cloud agent with `AGENT_MODEL` (GPT-6.1 Terra), or with `STRONG_MODEL` (Claude Sonnet 5.5) when the issue also has the `model:strong` label. Fix rounds use the same rule, reading the labels of the issue the pull request closes.
 3. **Write.** Copilot opens a pull request and works until it requests a review.
 4. **CI.** When Copilot has finished, the loop waits for the pull request's CI (up to 15 minutes). If CI fails, it starts a fix round for the failing workflows instead of a review: reviewing code that does not build wastes a review.
