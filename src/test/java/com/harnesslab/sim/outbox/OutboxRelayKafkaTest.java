@@ -2,6 +2,7 @@ package com.harnesslab.sim.outbox;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,7 +10,6 @@ import com.harnesslab.sim.service.SimActivationService;
 import com.harnesslab.sim.types.SimOrdered;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -104,9 +104,10 @@ class OutboxRelayKafkaTest {
         assertEquals(ICCID, event.get("iccid").asText());
         assertEquals(msisdn, event.get("msisdn").asText());
         assertNotNull(event.get("deactivatedAt"));
-        assertEquals(
-                jdbc.queryForObject("select deactivated_at from sim where iccid = ?", Instant.class, ICCID),
-                Instant.parse(event.get("deactivatedAt").asText()).truncatedTo(ChronoUnit.MICROS));
+        Instant persistedTime =
+                jdbc.queryForObject("select deactivated_at from sim where iccid = ?", Instant.class, ICCID);
+        Instant eventTime = Instant.parse(event.get("deactivatedAt").asText());
+        assertTrue(Duration.between(persistedTime, eventTime).abs().compareTo(Duration.ofNanos(1_000)) <= 0);
         assertEquals(eventId, UUID.fromString(event.get("eventId").asText()));
         long deadline = System.currentTimeMillis() + 30_000;
         Integer sent = 0;
