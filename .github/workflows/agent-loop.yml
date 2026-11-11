@@ -31,9 +31,12 @@ concurrency:
 # A workflow added or changed in a pull request runs on that pull request's branch and cannot read it.
 env:
   GH_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
-  MAX_FIX_ROUNDS: ${{ vars.AGENT_MAX_FIX_ROUNDS || '2' }}
-  REREVIEW_EFFORT: LITE
-  AGENT_MODEL: claude-sonnet-5.5
+  MAX_FIX_ROUNDS: ${{ vars.AGENT_MAX_FIX_ROUNDS || '1' }}
+  REVIEW_EFFORT: LITE
+  # Default model: best intelligence per price in Copilot (Artificial Analysis Intelligence Index 51,
+  # $1 / $5 per 1M tokens). Issues labelled model:strong use STRONG_MODEL (index 55, $2 / $10).
+  AGENT_MODEL: gpt-6.1-terra
+  STRONG_MODEL: claude-sonnet-5.5
   HUMAN_REVIEWER: rsercano
 
 jobs:

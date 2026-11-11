@@ -10,10 +10,12 @@ set -euo pipefail
 REPO="${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY to owner/name}"
 OWNER="${REPO%/*}"
 NAME="${REPO#*/}"
-MAX_FIX_ROUNDS="${MAX_FIX_ROUNDS:-2}"
+MAX_FIX_ROUNDS="${MAX_FIX_ROUNDS:-1}"
 HUMAN_REVIEWER="${HUMAN_REVIEWER:?set HUMAN_REVIEWER to a GitHub login}"
 AGENT_MODEL="${AGENT_MODEL:-}"
-REREVIEW_EFFORT="${REREVIEW_EFFORT:-LITE}"
+STRONG_MODEL="${STRONG_MODEL:-$AGENT_MODEL}"
+REVIEW_EFFORT="${REVIEW_EFFORT:-LITE}"
+STRONG_LABEL="model:strong"
 REVIEWER="copilot-pull-request-reviewer[bot]"
 AGENT_WORKFLOW="dynamic/copilot-swe-agent/copilot"
 LOOP_WORKFLOW=".github/workflows/agent-loop.yml"
@@ -22,6 +24,12 @@ HANDOFF_LABEL="ready-for-human"
 FIX_MARKER="agent-loop:fix"
 
 log() { echo "agent-loop: $*" >&2; }  # stderr, so it never mixes into a captured result
+
+# The model for an issue or a pull request: STRONG_MODEL when the issue (or an issue the pull request
+# closes) has the model:strong label, otherwise the cheaper AGENT_MODEL.
+model_for_labels() {
+  if grep -qx "$STRONG_LABEL" <<<"$1"; then echo "$STRONG_MODEL"; else echo "$AGENT_MODEL"; fi
+}
 
 # gh with retries for answers that mean "try again later" (rate limit, 5xx, GraphQL SERVICE_UNAVAILABLE).
 gh_retry() {
@@ -53,19 +61,21 @@ assign() {
     return
   fi
   issue_id=$(jq -r .node_id <<<"$data")
+  local model
+  model=$(model_for_labels "$(jq -r '.labels[].name' <<<"$data")")
   bot_id=$(gh_retry api graphql -f query='query($o:String!,$n:String!){repository(owner:$o,name:$n){suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:50){nodes{login ... on Bot{id}}}}}' \
     -f o="$OWNER" -f n="$NAME" --jq '.data.repository.suggestedActors.nodes[] | select(.login=="copilot-swe-agent") | .id')
   [ -n "$bot_id" ] || { echo "::error::Copilot cloud agent cannot be assigned in $REPO. FIX: enable it under Settings > Copilot > Cloud."; exit 1; }
-  if [ -n "$AGENT_MODEL" ]; then
+  if [ -n "$model" ]; then
     gh_retry api graphql -H 'GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection' \
       -f query='mutation($a:ID!,$b:ID!,$m:String!){addAssigneesToAssignable(input:{assignableId:$a,assigneeIds:[$b],agentAssignment:{model:$m}}){clientMutationId}}' \
-      -f a="$issue_id" -f b="$bot_id" -f m="$AGENT_MODEL" >/dev/null
+      -f a="$issue_id" -f b="$bot_id" -f m="$model" >/dev/null
   else
     gh_retry api graphql -H 'GraphQL-Features: issues_copilot_assignment_api_support' \
       -f query='mutation($a:ID!,$b:ID!){addAssigneesToAssignable(input:{assignableId:$a,assigneeIds:[$b]}){clientMutationId}}' \
       -f a="$issue_id" -f b="$bot_id" >/dev/null
   fi
-  log "issue #$issue assigned to Copilot, model ${AGENT_MODEL:-auto}"
+  log "issue #$issue assigned to Copilot, model ${model:-auto}"
 }
 
 comment() { gh_retry api "repos/$REPO/issues/$1/comments" -f body="$2" >/dev/null; }
@@ -84,16 +94,19 @@ Check that the diff matches the acceptance criteria of the linked issue, then me
 # The session is started through the agent tasks API, which lets us choose the model; a plain @copilot
 # comment always runs with the default model. If the API refuses, the @copilot comment is the fallback.
 start_fix() {
-  local pr="$1" marker="$2" round="$3" what="$4" prompt="$5" head base
+  local pr="$1" marker="$2" round="$3" what="$4" prompt="$5" head base labels model
+  labels=$(gh_retry api graphql -f query='query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){labels(first:20){nodes{name}} closingIssuesReferences(first:5){nodes{labels(first:20){nodes{name}}}}}}}' \
+    -f o="$OWNER" -f n="$NAME" -F p="$pr" --jq '.data.repository.pullRequest | [.labels.nodes[].name, .closingIssuesReferences.nodes[].labels.nodes[].name] | .[]')
+  model=$(model_for_labels "$labels")
   head=$(jq -r .head.ref <<<"$info")
   base=$(jq -r .base.ref <<<"$info")
   comment "$pr" "Agent loop: fix round $round of $MAX_FIX_ROUNDS, $what.
 
 <!-- $marker -->"
   local args=(api "agents/repos/$REPO/tasks" -f prompt="$prompt" -f head_ref="$head" -f base_ref="$base")
-  [ -n "$AGENT_MODEL" ] && args+=(-f model="$AGENT_MODEL")
+  [ -n "$model" ] && args+=(-f model="$model")
   if gh_retry "${args[@]}" >/dev/null; then
-    log "PR #$pr: started fix round $round ($what) with model ${AGENT_MODEL:-auto}"
+    log "PR #$pr: started fix round $round ($what) with model ${model:-auto}"
   else
     comment "$pr" "@copilot $prompt"
     log "PR #$pr: agent tasks API refused; asked @copilot for fix round $round ($what)"
@@ -134,7 +147,7 @@ wait_for_ci() {
 }
 
 reconcile() {
-  local pr="$1" branch agent_runs finished reviews rounds fixes last_at last_id comments draft result sha ci effort prompt
+  local pr="$1" branch agent_runs finished reviews rounds fixes last_at last_id comments draft result sha ci prompt
   info=$(gh_retry api "repos/$REPO/pulls/$pr")
   if [ "$(jq -r .user.login <<<"$info")" != Copilot ] || [ "$(jq -r .state <<<"$info")" != open ]; then
     log "PR #$pr is not an open Copilot pull request"; return
@@ -184,18 +197,11 @@ reconcile() {
     if [ "$rounds" -gt "$MAX_FIX_ROUNDS" ]; then
       handoff "$pr" "The review limit ($rounds reviews) is reached." "$draft"; return
     fi
-    # The first review uses the repository default (Balanced); later reviews only check the fixes.
-    effort=""
-    [ "$rounds" -gt 0 ] && effort="$REREVIEW_EFFORT"
-    if [ -n "$effort" ]; then
-      result=$(gh_retry api graphql -f query='mutation($p:ID!,$e:CopilotCodeReviewEffort!){requestCopilotCodeReview(input:{pullRequestId:$p,reviewEffort:$e}){success failureReason}}' \
-        -f p="$(jq -r .node_id <<<"$info")" -f e="$effort" --jq '.data.requestCopilotCodeReview | "\(.success) \(.failureReason)"') || true
-    else
-      result=$(gh_retry api graphql -f query='mutation($p:ID!){requestCopilotCodeReview(input:{pullRequestId:$p}){success failureReason}}' \
-        -f p="$(jq -r .node_id <<<"$info")" --jq '.data.requestCopilotCodeReview | "\(.success) \(.failureReason)"') || true
-    fi
+    # Every review uses REVIEW_EFFORT (Lite): about $0.25 against about $1.50 for Balanced.
+    result=$(gh_retry api graphql -f query='mutation($p:ID!,$e:CopilotCodeReviewEffort!){requestCopilotCodeReview(input:{pullRequestId:$p,reviewEffort:$e}){success failureReason}}' \
+      -f p="$(jq -r .node_id <<<"$info")" -f e="$REVIEW_EFFORT" --jq '.data.requestCopilotCodeReview | "\(.success) \(.failureReason)"') || true
     case "$result" in
-      true*) log "PR #$pr: requested Copilot review $((rounds + 1)), effort ${effort:-default}" ;;
+      true*) log "PR #$pr: requested Copilot review $((rounds + 1)), effort $REVIEW_EFFORT" ;;
       *REQUEST_CONFLICT*) log "PR #$pr: a Copilot review is already requested by another run"; return ;;
       *) echo "::error::Copilot review request for PR #$pr failed: $result"; return 1 ;;
     esac
