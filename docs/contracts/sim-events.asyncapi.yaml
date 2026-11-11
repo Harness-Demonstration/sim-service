@@ -1,0 +1,45 @@
+asyncapi: 3.1.0
+info:
+  title: sim-service events
+  version: 1.0.0
+  description: Messages sim-service consumes and publishes. Change this file before the Java code.
+channels:
+  simOrdered:
+    address: sim.ordered
+    messages:
+      SimOrdered:
+        $ref: '#/components/messages/SimOrdered'
+  simActivated:
+    address: sim.activated
+    messages:
+      SimActivated:
+        $ref: '#/components/messages/SimActivated'
+operations:
+  receiveSimOrdered:
+    action: receive
+    channel:
+      $ref: '#/channels/simOrdered'
+  publishSimActivated:
+    action: send
+    channel:
+      $ref: '#/channels/simActivated'
+components:
+  messages:
+    SimOrdered:
+      payload:
+        type: object
+        required: [iccid, msisdn, orderId]
+        properties:
+          iccid: {type: string}
+          msisdn: {type: string}
+          orderId: {type: string}
+    SimActivated:
+      payload:
+        type: object
+        additionalProperties: false
+        required: [eventId, iccid, msisdn, activatedAt]
+        properties:
+          eventId: {type: string, format: uuid, description: Same value on a redelivery; consumers drop duplicates by it.}
+          iccid: {type: string}
+          msisdn: {type: string}
+          activatedAt: {type: string, format: date-time}
