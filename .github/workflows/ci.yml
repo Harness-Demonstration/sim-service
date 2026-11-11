@@ -20,3 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: scripts/check-docs.sh
+
+  generated-docs:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: scripts/generate-kafka-docs.sh
+      - name: Generated docs match the contract
+        run: git diff --exit-code -- docs/generated || (echo "::error::docs/generated/kafka-topics.md differs from a fresh generation. FIX: change docs/contracts/sim-events.asyncapi.yaml, run scripts/generate-kafka-docs.sh and commit the result." && exit 1)
