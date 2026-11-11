@@ -1,0 +1,63 @@
+name: Agent loop
+
+# Moves agent work forward without a person in the middle:
+# agent-ready issue -> Copilot writes a PR -> Copilot reviews -> Copilot fixes (at most MAX_FIX_ROUNDS) -> a human.
+# All decisions live in scripts/agent-loop.sh; design in docs/design-docs/agent-loop.md.
+# Only triggers that run the workflow file from the default branch are used (workflow_run, pull_request_target,
+# issues), and the jobs never check out pull request code, so a pull request cannot change what runs with the token.
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_run:
+    workflows: ["Copilot cloud agent", "Copilot"]
+    types: [completed]
+  pull_request_target:
+    types: [review_requested]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to move forward
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-loop-${{ github.event.issue.number || github.event.pull_request.number || github.event.workflow_run.head_branch || inputs.pr }}
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
+  MAX_FIX_ROUNDS: "2"
+  AGENT_MODEL: claude-sonnet-5.5
+  HUMAN_REVIEWER: rsercano
+
+jobs:
+  assign:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - env:
+          ISSUE: ${{ github.event.issue.number }}
+        run: scripts/agent-loop.sh assign "$ISSUE"
+
+  reconcile:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - env:
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -n "$PR" ]; then
+            scripts/agent-loop.sh reconcile "$PR"
+          else
+            scripts/agent-loop.sh reconcile-branch "$BRANCH"
+          fi
