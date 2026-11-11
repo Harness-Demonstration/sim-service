@@ -14,6 +14,7 @@ MAX_FIX_ROUNDS="${MAX_FIX_ROUNDS:-2}"
 HUMAN_REVIEWER="${HUMAN_REVIEWER:?set HUMAN_REVIEWER to a GitHub login}"
 AGENT_MODEL="${AGENT_MODEL:-}"
 REVIEWER="copilot-pull-request-reviewer[bot]"
+AGENT_WORKFLOW="dynamic/copilot-swe-agent/copilot"
 READY_LABEL="agent-ready"
 HANDOFF_LABEL="ready-for-human"
 FIX_MARKER="agent-loop:fix"
@@ -71,7 +72,7 @@ wait_for_review() {
 }
 
 reconcile() {
-  local pr="$1" info timeline started finished reviews rounds fixes last_at last_id comments draft result
+  local pr="$1" info branch agent_runs finished reviews rounds fixes last_at last_id comments draft result
   info=$(gh api "repos/$REPO/pulls/$pr")
   if [ "$(jq -r .user.login <<<"$info")" != Copilot ] || [ "$(jq -r .state <<<"$info")" != open ]; then
     log "PR #$pr is not an open Copilot pull request"; return
@@ -84,12 +85,16 @@ reconcile() {
   fi
   draft=$(jq -r .draft <<<"$info")
 
-  timeline=$(gh api --paginate "repos/$REPO/issues/$pr/timeline" | jq -rs '[.[][] | select(.event=="copilot_work_started" or .event=="copilot_work_finished")] | .[] | [.event, .created_at] | @tsv')
-  started=$(awk '$1=="copilot_work_started"{t=$2} END{print t}' <<<"$timeline")
-  finished=$(awk '$1=="copilot_work_finished"{t=$2} END{print t}' <<<"$timeline")
-  if [ -z "$finished" ] || [[ "$started" > "$finished" ]]; then
+  # Whether the coding agent is working comes from its own Actions runs on the pull request branch.
+  # The timeline is not used: Copilot code review also writes copilot_work_started and never a matching
+  # copilot_work_finished, which made the loop wait forever on PR #25.
+  branch=$(jq -r '.head.ref | @uri' <<<"$info")
+  agent_runs=$(gh api "repos/$REPO/actions/runs?branch=$branch&per_page=50" \
+    | jq --arg p "$AGENT_WORKFLOW" '[.workflow_runs[] | select(.path==$p)]')
+  if jq -e 'length == 0 or any(.status != "completed")' <<<"$agent_runs" >/dev/null; then
     log "PR #$pr: Copilot is still working"; return 3
   fi
+  finished=$(jq -r 'map(.updated_at) | max' <<<"$agent_runs")
 
   reviews=$(gh api --paginate "repos/$REPO/pulls/$pr/reviews" | jq -s --arg r "$REVIEWER" '[.[][] | select(.user.login==$r and .state!="PENDING")] | sort_by(.submitted_at)')
   rounds=$(jq length <<<"$reviews")
