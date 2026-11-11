@@ -59,8 +59,19 @@ Check that the diff matches the acceptance criteria of the linked issue, approve
   log "PR #$pr handed to $HUMAN_REVIEWER: $reason"
 }
 
+wait_for_review() {
+  local pr="$1" before="$2" now
+  for _ in $(seq 1 60); do
+    now=$(gh api --paginate "repos/$REPO/pulls/$pr/reviews" | jq -s --arg r "$REVIEWER" '[.[][] | select(.user.login==$r and .state!="PENDING")] | length')
+    if [ "$now" -gt "$before" ]; then log "PR #$pr: Copilot review $now arrived"; return 0; fi
+    sleep 10
+  done
+  log "PR #$pr: no Copilot review after 10 minutes; a later event or a manual run moves it forward"
+  return 1
+}
+
 reconcile() {
-  local pr="$1" info timeline started finished reviews rounds fixes last_at last_id comments draft
+  local pr="$1" info timeline started finished reviews rounds fixes last_at last_id comments draft result
   info=$(gh api "repos/$REPO/pulls/$pr")
   if [ "$(jq -r .user.login <<<"$info")" != Copilot ] || [ "$(jq -r .state <<<"$info")" != open ]; then
     log "PR #$pr is not an open Copilot pull request"; return
@@ -89,9 +100,17 @@ reconcile() {
     if [ "$rounds" -gt "$MAX_FIX_ROUNDS" ]; then
       handoff "$pr" "The review limit ($rounds reviews) is reached." "$draft"; return
     fi
-    gh api graphql -f query='mutation($p:ID!){requestCopilotCodeReview(input:{pullRequestId:$p}){success failureReason}}' \
-      -f p="$(jq -r .node_id <<<"$info")" --jq '.data.requestCopilotCodeReview | "success=\(.success) reason=\(.failureReason)"'
-    log "PR #$pr: requested Copilot review $((rounds + 1))"; return
+    result=$(gh api graphql -f query='mutation($p:ID!){requestCopilotCodeReview(input:{pullRequestId:$p}){success failureReason}}' \
+      -f p="$(jq -r .node_id <<<"$info")" --jq '.data.requestCopilotCodeReview | "\(.success) \(.failureReason)"')
+    case "$result" in
+      true*) log "PR #$pr: requested Copilot review $((rounds + 1))" ;;
+      *REQUEST_CONFLICT*) log "PR #$pr: a Copilot review is already requested by another run"; return ;;
+      *) echo "::error::Copilot review request for PR #$pr failed: $result"; return 1 ;;
+    esac
+    # The run that GitHub starts when Copilot's review finishes waits for approval (it is started by the
+    # reviewer bot), so this run waits for the review itself and then takes the next step.
+    wait_for_review "$pr" "$rounds" && reconcile "$pr"
+    return
   fi
 
   last_id=$(jq -r '.[-1].id' <<<"$reviews")
