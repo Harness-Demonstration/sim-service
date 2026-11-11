@@ -13,6 +13,7 @@
 | Repository and outbox | real PostgreSQL from Testcontainers, Flyway migrations applied | anything that touches SQL or transactions |
 | Kafka integration | real Kafka from Testcontainers | the relay and consumers |
 | Architecture | ArchUnit in `LayerRulesTest` | every build |
+| Contract | `MessageContractTest` checks the messages against `docs/contracts/sim-events.asyncapi.yaml` | every build |
 
 ## Testcontainers
 - The version comes from the `testcontainers.version` property in `pom.xml` (1.21.4 or later). Never write a version on the individual dependencies; older versions cannot talk to the Docker Engine on GitHub runners.
