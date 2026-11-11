@@ -31,3 +31,19 @@ jobs:
       - run: scripts/generate-docs.sh
       - run: git add --intent-to-add docs/generated
       - run: git diff --exit-code -- docs/generated || (echo "::error::docs/generated is out of date. FIX - run scripts/generate-docs.sh and commit the result." && exit 1)
+
+  consumer-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone billing-service, which consumes sim.activated and sim.deactivated
+        run: git clone --depth 1 https://github.com/Harness-Demonstration/billing-service.git "$RUNNER_TEMP/billing-service"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run billing-service's contract test against this contract
+        working-directory: ${{ runner.temp }}/billing-service
+        env:
+          SIM_EVENTS_CONTRACT: ${{ github.workspace }}/docs/contracts/sim-events.asyncapi.yaml
+        run: ./mvnw -B test -Dtest=MessageContractTest

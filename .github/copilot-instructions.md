@@ -33,7 +33,7 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 7. Before you open or update the pull request, run `./mvnw -q verify` (needs Docker for Testcontainers) and `scripts/check-docs.sh`.
 8. In the pull request description, list each acceptance criterion with the test that proves it.
 9. If you add a document under `docs/`, link it from the matching `index.md` or from this map.
-10. A message shape changes in `docs/contracts/sim-events.asyncapi.yaml` first, then in the code. Files in `docs/generated/` are never edited by hand; run `scripts/generate-docs.sh` instead.
+10. A message shape changes in `docs/contracts/sim-events.asyncapi.yaml` first, then in the code. Files in `docs/generated/` are never edited by hand; run `scripts/generate-docs.sh` instead. CI job `consumer-contracts` runs billing-service's contract test against your contract; if it fails, keep the old shape or add a new channel.
 11. When asked to address review comments, fix each one or reply to it with the reason the code stays as it is.
 
 ## Never
