@@ -6,6 +6,7 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 
 * [Operations](#operations)
   * [RECEIVE sim.ordered](#receive-simordered-operation)
+  * [SEND sim.ordered.dlt](#send-simordereddlt-operation)
   * [SEND sim.activated](#send-simactivated-operation)
   * [SEND sim.deactivated](#send-simdeactivated-operation)
 
@@ -22,8 +23,8 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 | Name | Type | Description | Value | Constraints | Notes |
 |---|---|---|---|---|---|
 | (root) | object | - | - | - | **additional properties are allowed** |
-| iccid | string | - | - | - | **required** |
-| msisdn | string | - | - | - | **required** |
+| iccid | string | - | - | pattern (`^[0-9]{19,20}$`) | **required** |
+| msisdn | string | - | - | pattern (`^[1-9][0-9]{0,14}$`) | **required** |
 | orderId | string | - | - | - | **required** |
 
 > Examples of payload _(generated)_
@@ -34,6 +35,50 @@ Messages sim-service consumes and publishes. Change this file before the Java co
   "msisdn": "string",
   "orderId": "string"
 }
+```
+
+
+
+### SEND `sim.ordered.dlt` Operation
+
+* Operation ID: `publishSimOrderedDeadLetter`
+
+#### Message `SimOrderedDeadLetter`
+
+* Message ID: `SimOrderedDeadLetter`
+* Content type: [application/octet-stream](https://www.iana.org/assignments/media-types/application/octet-stream)
+
+Original sim.ordered value bytes and key, unchanged (including a null value). Delivery is at least once; eventId identifies outbox redeliveries. Reprocessing an input record after a consumer restart can create a new eventId.
+
+
+##### Headers
+
+| Name | Type | Description | Value | Constraints | Notes |
+|---|---|---|---|---|---|
+| (root) | object | - | - | - | **additional properties are allowed** |
+| reason | string | UTF-8 explanation of the rejection. | - | - | **required** |
+| eventId | string | UTF-8 identifier stable across redeliveries. | - | format (`uuid`) | **required** |
+
+> Examples of headers _(generated)_
+
+```json
+{
+  "reason": "string",
+  "eventId": "d6703cc8-9e79-415d-ac03-a4dc7f6ab43c"
+}
+```
+
+
+##### Payload
+
+| Name | Type | Description | Value | Constraints | Notes |
+|---|---|---|---|---|---|
+| (root) | any | Original Kafka value bytes, which may not be valid JSON or UTF-8, or may be null. | - | - | **additional properties are allowed** |
+
+> Examples of payload _(generated)_
+
+```json
+""
 ```
 
 
