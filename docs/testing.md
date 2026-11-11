@@ -12,6 +12,7 @@
 | Unit | plain JUnit, fakes declared inside the test class, fixed `Clock` | business rules in `service` |
 | Repository and outbox | real PostgreSQL from Testcontainers, Flyway migrations applied | anything that touches SQL or transactions |
 | Kafka integration | real Kafka from Testcontainers | the relay and consumers |
+| Contract | JSON Schema from the AsyncAPI contract, `MessageContractTest` | every message shape the service sends or reads |
 | Architecture | ArchUnit in `LayerRulesTest` | every build |
 
 ## Testcontainers
