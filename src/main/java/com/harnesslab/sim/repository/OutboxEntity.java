@@ -20,6 +20,9 @@ public class OutboxEntity {
     @Column(name = "aggregate_id", nullable = false, length = 64)
     private String aggregateId;
 
+    @Column(name = "aggregate_sequence", nullable = false)
+    private long aggregateSequence;
+
     @Column(nullable = false, length = 128)
     private String topic;
 
@@ -38,6 +41,7 @@ public class OutboxEntity {
     OutboxEntity(OutboxEvent event) {
         this.id = event.id();
         this.aggregateId = event.aggregateId();
+        this.aggregateSequence = event.aggregateSequence();
         this.topic = event.topic();
         this.payload = event.payload();
         this.createdAt = event.createdAt();
@@ -45,6 +49,6 @@ public class OutboxEntity {
     }
 
     OutboxEvent toDomain() {
-        return new OutboxEvent(id, aggregateId, topic, payload, createdAt, sentAt);
+        return new OutboxEvent(id, aggregateId, topic, payload, createdAt, sentAt, aggregateSequence);
     }
 }

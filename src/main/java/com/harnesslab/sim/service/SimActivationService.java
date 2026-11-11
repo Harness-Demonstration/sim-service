@@ -57,7 +57,8 @@ public class SimActivationService {
                 SIM_ACTIVATED_TOPIC,
                 toJson(new SimActivated(eventId, sim.iccid(), sim.msisdn(), activatedAt)),
                 activatedAt,
-                null));
+                null,
+                1));
     }
 
     @Transactional
@@ -79,7 +80,8 @@ public class SimActivationService {
                 SIM_DEACTIVATED_TOPIC,
                 toJson(new SimDeactivated(eventId, sim.iccid(), sim.msisdn(), deactivatedAt)),
                 deactivatedAt,
-                null));
+                null,
+                2));
     }
 
     private String toJson(Object event) {

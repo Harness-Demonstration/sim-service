@@ -24,6 +24,7 @@ Created by a Flyway migration.
 |---|---|---|
 | `id` | `uuid` primary key | also the event's `eventId` |
 | `aggregate_id` | `varchar` | the entity the event is about, used as the Kafka key (ICCID for SIM events) |
+| `aggregate_sequence` | `bigint` | event order within the aggregate; a later event waits for every earlier event to be acknowledged |
 | `topic` | `varchar` | target topic, for example `sim.activated` |
 | `payload` | `jsonb` | the event exactly as it will be published |
 | `created_at` | `timestamptz` | from the injected `Clock` |
@@ -31,7 +32,7 @@ Created by a Flyway migration.
 
 ## Relay
 - Runs on a schedule, every second.
-- In one transaction: selects up to 100 rows `WHERE sent_at IS NULL ORDER BY created_at` with `FOR UPDATE SKIP LOCKED`, sends all of them to Kafka, then waits for all acknowledgements together, sets `sent_at` on the acknowledged rows, commits.
+- In one transaction: selects up to 100 unsent rows for which no earlier sequence on the same aggregate is pending, ordered by `created_at`, with `FOR UPDATE SKIP LOCKED`; sends them to Kafka, waits for acknowledgements together, sets `sent_at` on acknowledged rows, and commits.
 - Send first, wait after: Kafka handles the sends in parallel, so the transaction stays open for about one round trip to Kafka, not one round trip per row. Never wait for each send before sending the next.
 - `SKIP LOCKED` lets several instances of the service run the relay at once without publishing the same row twice at the same time.
 - Rows whose send failed or timed out keep `sent_at = null` and the next run retries them.
@@ -43,7 +44,7 @@ The transaction is still open while the relay waits for Kafka, at most the ackno
 The layer rules apply. The scheduled trigger and the Kafka publisher live in `stream`. Reading and marking outbox rows is a `service` method that uses a repository. `stream` calls that service method and passes the publisher.
 
 ## Ordering
-The pattern normally keeps the order in which the application wrote the events. Here a failed row is retried in a later run, after newer rows may already be sent, so order is not guaranteed. Today every SIM has a single activation event, so this does not matter yet; it is tracked in `docs/exec-plans/tech-debt-tracker.md`.
+Every event has an increasing `aggregate_sequence`. The relay does not claim an event while an earlier sequence for that aggregate is pending, so a failed activation blocks deactivation (including across relay instances and retries). Once the earlier event is acknowledged and committed, the next sequence is eligible in a later run. Events for different aggregates can still be published concurrently.
 
 ## Delivery guarantee
 At least once. If the relay publishes and then crashes before setting `sent_at`, the next run publishes the row again. Consumers must drop duplicates by `eventId`; every event carries it.
@@ -59,6 +60,7 @@ At least once. If the relay publishes and then crashes before setting `sent_at`,
 - The state change and the outbox row commit together, and a failing outbox insert leaves no state change (real PostgreSQL).
 - The relay publishes to a real Kafka and marks the row sent (Testcontainers Kafka).
 - A failing publish leaves the row pending and a later run sends it.
+- A failed earlier event blocks later events for the same aggregate until it is acknowledged.
 - Two events have two different `eventId` values.
 
 ## Not decided yet
