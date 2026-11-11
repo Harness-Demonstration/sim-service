@@ -148,4 +148,80 @@ class OutboxPersistenceTest {
         assertEquals(2, jdbc.queryForObject(
                 "select count(distinct payload->>'eventId') from outbox", Integer.class));
     }
+
+    @Test
+    void a11_failing_outbox_insert_leaves_the_sim_activated() {
+        service.activate(ICCID);
+        doThrow(new IllegalStateException("outbox insert failed")).when(outbox).save(any());
+
+        assertThrows(RuntimeException.class, () -> service.deactivate(ICCID));
+
+        assertNull(simRepository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+        assertEquals(1, jdbc.queryForObject("select count(*) from outbox", Integer.class));
+    }
+
+    @Test
+    void a11_deactivation_and_outbox_row_are_committed_together() {
+        service.activate(ICCID);
+        service.deactivate(ICCID);
+
+        assertNotNull(simRepository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from outbox where topic = 'sim.deactivated'", Integer.class));
+    }
+
+    @Test
+    void failed_activation_blocks_deactivation_until_activation_retries() {
+        service.activate(ICCID);
+        service.deactivate(ICCID);
+        List<OutboxEvent> attempted = new ArrayList<>();
+
+        assertEquals(0, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.failedFuture(new IllegalStateException("Kafka down"));
+        }));
+        assertEquals(List.of("sim.activated"), attempted.stream().map(OutboxEvent::topic).toList());
+        assertEquals(2, jdbc.queryForObject("select count(*) from outbox where sent_at is null", Integer.class));
+
+        assertEquals(1, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.completedFuture(null);
+        }));
+        assertEquals(List.of("sim.activated", "sim.activated"), attempted.stream().map(OutboxEvent::topic).toList());
+        assertEquals(1, jdbc.queryForObject("select count(*) from outbox where sent_at is null", Integer.class));
+
+        assertEquals(1, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.completedFuture(null);
+        }));
+        assertEquals(
+                List.of("sim.activated", "sim.activated", "sim.deactivated"),
+                attempted.stream().map(OutboxEvent::topic).toList());
+    }
+
+    @Test
+    void failed_deactivation_publish_retries_with_the_same_event_id() {
+        service.activate(ICCID);
+        relay.relayPending(event -> CompletableFuture.completedFuture(null));
+        service.deactivate(ICCID);
+        UUID eventId =
+                jdbc.queryForObject("select id from outbox where topic = 'sim.deactivated'", UUID.class);
+        List<OutboxEvent> attempted = new ArrayList<>();
+
+        assertEquals(0, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.failedFuture(new IllegalStateException("Kafka down"));
+        }));
+        assertNull(jdbc.queryForObject(
+                "select sent_at from outbox where topic = 'sim.deactivated'", java.time.Instant.class));
+
+        assertEquals(1, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.completedFuture(null);
+        }));
+        assertEquals(List.of(eventId, eventId), attempted.stream().map(OutboxEvent::id).toList());
+        assertEquals("sim.deactivated", attempted.get(0).topic());
+        assertNotNull(jdbc.queryForObject(
+                "select sent_at from outbox where topic = 'sim.deactivated'", java.time.Instant.class));
+    }
 }

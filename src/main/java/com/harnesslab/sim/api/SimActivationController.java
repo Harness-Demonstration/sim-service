@@ -20,4 +20,10 @@ public class SimActivationController {
         service.activate(iccid);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/sims/{iccid}/deactivate")
+    public ResponseEntity<Void> deactivate(@PathVariable String iccid) {
+        service.deactivate(iccid);
+        return ResponseEntity.noContent().build();
+    }
 }

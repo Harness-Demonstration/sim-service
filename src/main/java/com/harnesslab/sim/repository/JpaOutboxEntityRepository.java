@@ -15,6 +15,16 @@ public interface JpaOutboxEntityRepository extends JpaRepository<OutboxEntity, U
     // jakarta.persistence.lock.timeout -2 is Hibernate's SKIP LOCKED
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
-    @Query("select e from OutboxEntity e where e.sentAt is null order by e.createdAt, e.id")
+    @Query("""
+            select e from OutboxEntity e
+            where e.sentAt is null
+              and not exists (
+                  select prior.id from OutboxEntity prior
+                  where prior.aggregateId = e.aggregateId
+                    and prior.aggregateSequence < e.aggregateSequence
+                    and prior.sentAt is null
+              )
+            order by e.createdAt, e.id
+            """)
     List<OutboxEntity> findPending(Pageable pageable);
 }

@@ -65,6 +65,31 @@ class MessageContractTest {
     }
 
     @Test
+    void sim_deactivated_as_sent_matches_the_contract() throws Exception {
+        List<OutboxEvent> saved = new ArrayList<>();
+        OutboxRepository outbox = new OutboxRepository() {
+            @Override
+            public void save(OutboxEvent event) {
+                saved.add(event);
+            }
+
+            @Override
+            public List<OutboxEvent> lockPending(int limit) {
+                return List.of();
+            }
+        };
+        Clock clock = Clock.fixed(Instant.parse("2026-01-02T03:04:05Z"), ZoneOffset.UTC);
+        Sim activatedSim = new Sim(ICCID, MSISDN, Instant.parse("2026-01-01T03:04:05Z"));
+        new SimActivationService(new SingleSimRepository(activatedSim), outbox, springObjectMapper(), clock)
+                .deactivate(ICCID);
+        String json = saved.get(0).payload();
+
+        Set<ValidationMessage> errors = schema("SimDeactivated").validate(json, InputFormat.JSON);
+
+        assertTrue(errors.isEmpty(), () -> "sim.deactivated does not match the contract: " + errors + " in " + json);
+    }
+
+    @Test
     void sim_ordered_matching_the_contract_can_be_read() throws Exception {
         String json = "{\"iccid\":\"" + ICCID + "\",\"msisdn\":\"" + MSISDN + "\",\"orderId\":\"order-1\"}";
         assertTrue(schema("SimOrdered").validate(json, InputFormat.JSON).isEmpty(), "fixture must match the contract");

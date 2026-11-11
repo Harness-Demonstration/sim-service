@@ -14,6 +14,11 @@ channels:
     messages:
       SimActivated:
         $ref: '#/components/messages/SimActivated'
+  simDeactivated:
+    address: sim.deactivated
+    messages:
+      SimDeactivated:
+        $ref: '#/components/messages/SimDeactivated'
 operations:
   receiveSimOrdered:
     action: receive
@@ -23,6 +28,10 @@ operations:
     action: send
     channel:
       $ref: '#/channels/simActivated'
+  publishSimDeactivated:
+    action: send
+    channel:
+      $ref: '#/channels/simDeactivated'
 components:
   messages:
     SimOrdered:
@@ -43,3 +52,13 @@ components:
           iccid: {type: string}
           msisdn: {type: string}
           activatedAt: {type: string, format: date-time}
+    SimDeactivated:
+      payload:
+        type: object
+        additionalProperties: false
+        required: [eventId, iccid, msisdn, deactivatedAt]
+        properties:
+          eventId: {type: string, format: uuid, description: Same value on a redelivery; consumers drop duplicates by it.}
+          iccid: {type: string}
+          msisdn: {type: string}
+          deactivatedAt: {type: string, format: date-time}

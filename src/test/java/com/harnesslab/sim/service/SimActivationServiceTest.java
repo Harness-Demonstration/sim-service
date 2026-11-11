@@ -13,6 +13,7 @@ import com.harnesslab.sim.repository.SimRepository;
 import com.harnesslab.sim.types.OutboxEvent;
 import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
+import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
 import java.time.Clock;
 import java.time.Instant;
@@ -67,6 +68,46 @@ class SimActivationServiceTest {
         service.activate(ICCID);
 
         assertEquals(1, outbox.events.size());
+    }
+
+    @Test
+    void a8_deactivating_an_active_sim_publishes_iccid_msisdn_and_deactivation_time() throws Exception {
+        service.activate(ICCID);
+
+        service.deactivate(ICCID);
+
+        assertEquals(2, outbox.events.size());
+        OutboxEvent row = outbox.events.get(1);
+        assertEquals("sim.deactivated", row.topic());
+        assertEquals(ICCID, row.aggregateId());
+        SimDeactivated event = MAPPER.readValue(row.payload(), SimDeactivated.class);
+        assertEquals(new SimDeactivated(row.id(), ICCID, MSISDN, ACTIVATION_TIME), event);
+        assertNotEquals(outbox.events.get(0).id(), row.id());
+        assertEquals(ACTIVATION_TIME, repository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+    }
+
+    @Test
+    void a9_deactivating_twice_publishes_once() {
+        service.activate(ICCID);
+        service.deactivate(ICCID);
+        service.deactivate(ICCID);
+
+        assertEquals(2, outbox.events.size());
+    }
+
+    @Test
+    void a10_deactivating_a_never_activated_sim_is_refused_and_publishes_nothing() {
+        assertThrows(SimNotActivatedException.class, () -> service.deactivate(ICCID));
+
+        assertEquals(0, outbox.events.size());
+        assertNull(repository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+    }
+
+    @Test
+    void a10_deactivating_an_unknown_iccid_is_refused_and_publishes_nothing() {
+        assertThrows(SimNotFoundException.class, () -> service.deactivate("8949000000000000009"));
+
+        assertEquals(0, outbox.events.size());
     }
 
     @Test

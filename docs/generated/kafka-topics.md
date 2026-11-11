@@ -7,6 +7,7 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 * [Operations](#operations)
   * [RECEIVE sim.ordered](#receive-simordered-operation)
   * [SEND sim.activated](#send-simactivated-operation)
+  * [SEND sim.deactivated](#send-simdeactivated-operation)
 
 ## Operations
 
@@ -61,6 +62,35 @@ Messages sim-service consumes and publishes. Change this file before the Java co
   "iccid": "string",
   "msisdn": "string",
   "activatedAt": "2019-08-24T14:15:22Z"
+}
+```
+
+
+
+### SEND `sim.deactivated` Operation
+
+* Operation ID: `publishSimDeactivated`
+
+#### Message `SimDeactivated`
+
+##### Payload
+
+| Name | Type | Description | Value | Constraints | Notes |
+|---|---|---|---|---|---|
+| (root) | object | - | - | - | **additional properties are NOT allowed** |
+| eventId | string | Same value on a redelivery; consumers drop duplicates by it. | - | format (`uuid`) | **required** |
+| iccid | string | - | - | - | **required** |
+| msisdn | string | - | - | - | **required** |
+| deactivatedAt | string | - | - | format (`date-time`) | **required** |
+
+> Examples of payload _(generated)_
+
+```json
+{
+  "eventId": "d6703cc8-9e79-415d-ac03-a4dc7f6ab43c",
+  "iccid": "string",
+  "msisdn": "string",
+  "deactivatedAt": "2019-08-24T14:15:22Z"
 }
 ```
 

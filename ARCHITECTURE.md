@@ -11,7 +11,7 @@ The one hard problem is that announcement: billing must never miss an activation
 ## Entry Points
 
 - `SimOrderedConsumer`: Kafka listener for `sim.ordered`.
-- `SimActivationController`: `POST /sims/{iccid}/activate`.
+- `SimActivationController`: `POST /sims/{iccid}/activate` and `POST /sims/{iccid}/deactivate`.
 - `OutboxRelay`: scheduled job that publishes pending outbox rows to Kafka.
 
 ## Code Map
@@ -20,7 +20,7 @@ All code lives under `com.harnesslab.sim`. Dependencies point down this list: `a
 
 ### `types`
 
-Plain records shared by all layers: `Sim`, the incoming `SimOrdered`, the outgoing `SimActivated`, and `OutboxEvent`. No logic, no Spring, no JPA.
+Plain records shared by all layers: `Sim`, the incoming `SimOrdered`, the outgoing `SimActivated` and `SimDeactivated`, and `OutboxEvent`. No logic, no Spring, no JPA.
 
 ### `config`
 
@@ -50,7 +50,7 @@ Kafka in both directions. `SimOrderedConsumer` turns a message into a `SimOrdere
 
 ### `api`
 
-REST. `SimActivationController` translates the request and calls the service; `SimExceptionHandler` turns `SimNotFoundException` into 404.
+REST. `SimActivationController` translates the request and calls the service; `SimExceptionHandler` turns `SimNotFoundException` into 404 and `SimNotActivatedException` (deactivating a never-activated SIM) into 409.
 
 **Architecture Invariant:** same as `stream`: no business logic, no `repository`.
 
@@ -58,7 +58,7 @@ REST. `SimActivationController` translates the request and calls the service; `S
 
 ### Events and delivery
 
-Every event goes through the outbox. Delivery is at least once; every `sim.activated` carries an `eventId` so consumers can drop duplicates. Changing the shape of a published message affects other services and must be called out in the pull request.
+Every event goes through the outbox. Delivery is at least once; every `sim.activated` and `sim.deactivated` carries an `eventId` so consumers can drop duplicates. Changing the shape of a published message affects other services and must be called out in the pull request.
 
 ### Testing
 
