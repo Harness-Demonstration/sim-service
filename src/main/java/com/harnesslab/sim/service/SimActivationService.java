@@ -119,7 +119,7 @@ public class SimActivationService {
     @Transactional
     public void activate(String iccid) {
         Sim sim = repository.findByIccidForUpdate(iccid).orElseThrow(() -> new SimNotFoundException(iccid));
-        if (sim.activatedAt() != null) {
+        if (sim.deactivatedAt() != null) {
             return;
         }
 
