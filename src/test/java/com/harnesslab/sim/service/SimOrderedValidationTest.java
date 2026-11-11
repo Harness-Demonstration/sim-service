@@ -83,6 +83,50 @@ class SimOrderedValidationTest {
     }
 
     @Test
+    void non_textual_or_missing_order_ids_are_rejected() throws Exception {
+        String prefix = "{\"iccid\":\"" + ICCID + "\",\"msisdn\":\"" + MSISDN + "\"";
+        List<String> invalid = List.of(prefix + "}", prefix + ",\"orderId\":null}",
+                prefix + ",\"orderId\":123}", prefix + ",\"orderId\":true}",
+                prefix + ",\"orderId\":false}", prefix + ",\"orderId\":{}}",
+                prefix + ",\"orderId\":[]}");
+        SimRepository sims = mock(SimRepository.class);
+        OutboxRepository outbox = mock(OutboxRepository.class);
+        ObjectMapper mapper = new ObjectMapper();
+        SimActivationService service = new SimActivationService(sims, outbox, mapper, Clock.systemUTC());
+        byte[] key = {(byte) 0xff, 1};
+
+        for (String value : invalid) {
+            service.registerOrderedMessage(value.getBytes(StandardCharsets.UTF_8), key);
+        }
+
+        verify(sims, never()).save(any());
+        ArgumentCaptor<OutboxEvent> events = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outbox, org.mockito.Mockito.times(invalid.size())).save(events.capture());
+        for (int i = 0; i < invalid.size(); i++) {
+            OutboxEvent event = events.getAllValues().get(i);
+            assertEquals("sim.ordered.dlt", event.topic());
+            var envelope = mapper.readTree(event.payload());
+            assertEquals(invalid.get(i), new String(Base64.getDecoder().decode(envelope.get("value").asText()), StandardCharsets.UTF_8));
+            assertEquals(Base64.getEncoder().encodeToString(key), envelope.get("key").asText());
+            assertEquals("Invalid orderId", envelope.get("reason").asText());
+        }
+    }
+
+    @Test
+    void empty_string_order_id_is_valid() {
+        SimRepository sims = mock(SimRepository.class);
+        OutboxRepository outbox = mock(OutboxRepository.class);
+        when(sims.findByIccid(ICCID)).thenReturn(Optional.empty());
+        SimActivationService service = new SimActivationService(sims, outbox, new ObjectMapper(), Clock.systemUTC());
+
+        service.registerOrderedMessage(("{\"iccid\":\"" + ICCID + "\",\"msisdn\":\"" + MSISDN
+                + "\",\"orderId\":\"\"}").getBytes(StandardCharsets.UTF_8), null);
+
+        verify(sims).save(new com.harnesslab.sim.types.Sim(ICCID, MSISDN, null));
+        verify(outbox, never()).save(any());
+    }
+
+    @Test
     void rejected_order_remains_pending_when_dead_letter_publish_fails() {
         SimRepository sims = mock(SimRepository.class);
         OutboxRepository outbox = mock(OutboxRepository.class);

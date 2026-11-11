@@ -71,12 +71,11 @@ public class SimActivationService {
             return;
         }
         JsonNode orderId = json.get("orderId");
-        if (orderId != null && !orderId.isNull() && !orderId.isValueNode()) {
+        if (orderId == null || !orderId.isTextual()) {
             rejectOrder(value, key, "Invalid orderId");
             return;
         }
-        registerOrdered(new SimOrdered(iccid.textValue(), msisdn.textValue(),
-                orderId == null || orderId.isNull() ? null : orderId.asText()));
+        registerOrdered(new SimOrdered(iccid.textValue(), msisdn.textValue(), orderId.textValue()));
     }
 
     private void rejectOrder(byte[] value, byte[] key, String reason) {
