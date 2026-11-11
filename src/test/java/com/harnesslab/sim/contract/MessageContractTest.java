@@ -12,6 +12,7 @@ import com.harnesslab.sim.service.SimActivationService;
 import com.harnesslab.sim.types.OutboxEvent;
 import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimOrdered;
+import com.harnesslab.sim.types.SimOrderedRejected;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
@@ -103,6 +105,17 @@ class MessageContractTest {
         assertTrue(schema("SimOrdered").validate(json, InputFormat.JSON).isEmpty(), "fixture must match the contract");
 
         assertEquals(new SimOrdered(ICCID, MSISDN, "order-1"), read(json));
+    }
+
+    @Test
+    void sim_ordered_rejected_with_event_id_matches_the_contract() throws Exception {
+        String json = new ObjectMapper()
+                .writeValueAsString(new SimOrderedRejected(
+                        UUID.fromString("5b1874b6-2065-4e8c-82e8-ded0c03ab02b"),
+                        "message is not valid JSON",
+                        "{not json"));
+
+        assertTrue(schema("SimOrderedRejected").validate(json, InputFormat.JSON).isEmpty());
     }
 
     private static ObjectMapper springObjectMapper() {

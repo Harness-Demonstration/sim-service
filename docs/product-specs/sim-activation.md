@@ -24,7 +24,7 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A10 | Deactivating a SIM that was never activated returns 409 and publishes nothing; an unknown ICCID returns 404 and publishes nothing. | done |
 | A11 | A deactivation and its `sim.deactivated` event are either both recorded or neither is. | done |
 | A12 | A `sim.ordered` message whose ICCID (19 or 20 digits) or MSISDN (7 to 15 digits) is missing or malformed is not stored. | done |
-| A13 | A rejected `sim.ordered` message, including one that is not valid JSON, is published unchanged with the reason to `sim.ordered.dead-letter`, and valid messages that follow are still stored. | done |
+| A13 | A rejected `sim.ordered` message, including one that is not valid JSON, is published unchanged with its reason and a stable `eventId` to `sim.ordered.dead-letter`, and valid messages that follow are still stored. | done |
 
 
 ## Retired criteria

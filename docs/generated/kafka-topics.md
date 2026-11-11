@@ -52,6 +52,7 @@ A sim.ordered message that was not stored because it is not valid JSON or its IC
 | Name | Type | Description | Value | Constraints | Notes |
 |---|---|---|---|---|---|
 | (root) | object | - | - | - | **additional properties are NOT allowed** |
+| eventId | string | Same value on a redelivery; consumers drop duplicates by it. | - | format (`uuid`) | **required** |
 | reason | string | Why the message was rejected. | - | - | **required** |
 | payload | string \| null | The original message exactly as received. | - | - | **required** |
 
@@ -59,6 +60,7 @@ A sim.ordered message that was not stored because it is not valid JSON or its IC
 
 ```json
 {
+  "eventId": "d6703cc8-9e79-415d-ac03-a4dc7f6ab43c",
   "reason": "string",
   "payload": "string"
 }

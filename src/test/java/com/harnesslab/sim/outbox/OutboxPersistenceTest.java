@@ -8,13 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harnesslab.sim.repository.OutboxRepository;
 import com.harnesslab.sim.repository.SimRepository;
 import com.harnesslab.sim.service.OutboxRelayService;
 import com.harnesslab.sim.service.SimActivationService;
 import com.harnesslab.sim.types.OutboxEvent;
 import com.harnesslab.sim.types.SimOrdered;
+import com.harnesslab.sim.types.SimOrderedRejected;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -171,6 +175,36 @@ class OutboxPersistenceTest {
     }
 
     @Test
+    void rejected_message_with_nul_round_trips_through_postgres_and_retries_with_same_event_id() throws Exception {
+        String original = "invalid\u0000message";
+        service.handleOrdered(original);
+        UUID eventId = jdbc.queryForObject("select id from outbox where topic = 'sim.ordered.dead-letter'", UUID.class);
+        List<OutboxEvent> attempted = new ArrayList<>();
+
+        assertEquals(0, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.failedFuture(new IllegalStateException("Kafka down"));
+        }));
+        assertEquals(1, relay.relayPending(event -> {
+            attempted.add(event);
+            return CompletableFuture.completedFuture(null);
+        }));
+
+        assertEquals(List.of(eventId, eventId), attempted.stream().map(OutboxEvent::id).toList());
+        assertEquals(attempted.get(0).payload(), attempted.get(1).payload());
+        SimOrderedRejected firstAttempt = readRejected(attempted.get(0).payload());
+        SimOrderedRejected retry = readRejected(attempted.get(1).payload());
+        String storedPayload =
+                jdbc.queryForObject("select payload::text from outbox where id = ?", String.class, eventId);
+        SimOrderedRejected rejected = readRejected(storedPayload);
+        assertEquals(firstAttempt, retry);
+        assertEquals(firstAttempt, rejected);
+        assertEquals(eventId, rejected.eventId());
+        assertEquals(original, rejected.payload());
+        assertEquals("message is not valid JSON", rejected.reason());
+    }
+
+    @Test
     void failed_activation_blocks_deactivation_until_activation_retries() {
         service.activate(ICCID);
         service.deactivate(ICCID);
@@ -223,5 +257,11 @@ class OutboxPersistenceTest {
         assertEquals("sim.deactivated", attempted.get(0).topic());
         assertNotNull(jdbc.queryForObject(
                 "select sent_at from outbox where topic = 'sim.deactivated'", java.time.Instant.class));
+    }
+
+    private static SimOrderedRejected readRejected(String storedPayload) throws Exception {
+        String encodedEvent = new ObjectMapper().readValue(storedPayload, String.class);
+        String eventJson = new String(Base64.getDecoder().decode(encodedEvent), StandardCharsets.UTF_8);
+        return new ObjectMapper().readValue(eventJson, SimOrderedRejected.class);
     }
 }

@@ -1,6 +1,7 @@
 package com.harnesslab.sim.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harnesslab.sim.repository.OutboxRepository;
@@ -11,8 +12,10 @@ import com.harnesslab.sim.types.SimActivated;
 import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
 import com.harnesslab.sim.types.SimOrderedRejected;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -49,7 +52,11 @@ public class SimActivationService {
         String reason = null;
         SimOrdered order = null;
         try {
-            JsonNode node = rawMessage == null ? null : objectMapper.readTree(rawMessage);
+            JsonNode node = rawMessage == null
+                    ? null
+                    : objectMapper.reader()
+                            .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                            .readTree(rawMessage);
             if (node == null || node.isMissingNode() || node.isNull()) {
                 reason = "message is empty";
             } else if (!node.isObject()) {
@@ -90,11 +97,14 @@ public class SimActivationService {
 
     private void deadLetter(String rawMessage, String reason) {
         UUID eventId = UUID.randomUUID();
+        String encodedPayload = Base64.getEncoder()
+                .encodeToString(toJson(new SimOrderedRejected(eventId, reason, rawMessage))
+                        .getBytes(StandardCharsets.UTF_8));
         outbox.save(new OutboxEvent(
                 eventId,
                 eventId.toString(),
                 SIM_ORDERED_DEAD_LETTER_TOPIC,
-                toJson(new SimOrderedRejected(reason, rawMessage)),
+                toJson(encodedPayload),
                 clock.instant(),
                 null,
                 1));

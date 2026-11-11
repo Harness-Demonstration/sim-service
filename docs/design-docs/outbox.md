@@ -26,7 +26,7 @@ Created by a Flyway migration.
 | `aggregate_id` | `varchar` | the entity the event is about, used as the Kafka key (ICCID for SIM events) |
 | `aggregate_sequence` | `bigint` | event order within the aggregate; a later event waits for every earlier event to be acknowledged |
 | `topic` | `varchar` | target topic, for example `sim.activated` |
-| `payload` | `jsonb` | the event exactly as it will be published |
+| `payload` | `jsonb` | the event to publish; dead-letter messages are stored as a base64-encoded JSON string and decoded by the Kafka adapter |
 | `created_at` | `timestamptz` | from the injected `Clock` |
 | `sent_at` | `timestamptz`, nullable | null until Kafka acknowledged the publish |
 
@@ -36,6 +36,8 @@ Created by a Flyway migration.
 - Send first, wait after: Kafka handles the sends in parallel, so the transaction stays open for about one round trip to Kafka, not one round trip per row. Never wait for each send before sending the next.
 - `SKIP LOCKED` lets several instances of the service run the relay at once without publishing the same row twice at the same time.
 - Rows whose send failed or timed out keep `sent_at = null` and the next run retries them.
+
+PostgreSQL `jsonb` rejects JSON strings containing U+0000. For `sim.ordered.dead-letter`, the service therefore stores the serialized event as base64 in `payload`; the Kafka adapter decodes it before publishing. This keeps malformed input lossless while retaining the required JSONB outbox column.
 
 ### Known limit
 The transaction is still open while the relay waits for Kafka, at most the acknowledgement timeout (10 seconds). If Kafka is slow, that holds one pooled connection and the row locks for that long, and a crash before commit re-sends the whole batch. Accepted for now. The next step, if this becomes a problem, is to claim rows with a lease in one short transaction, publish outside any transaction, and mark them sent in a second short transaction.

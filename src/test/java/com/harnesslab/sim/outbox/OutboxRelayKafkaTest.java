@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -49,6 +51,9 @@ class OutboxRelayKafkaTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private KafkaTemplate<String, String> kafka;
 
     @DynamicPropertySource
     static void configure(DynamicPropertyRegistry registry) {
@@ -117,6 +122,32 @@ class OutboxRelayKafkaTest {
             Thread.sleep(200);
         }
         assertEquals(1, sent);
+    }
+
+    @Test
+    void null_valued_order_record_reaches_dead_letter_through_listener() throws Exception {
+        kafka.send("sim.ordered", "tombstone-" + UUID.randomUUID(), null).get(10, TimeUnit.SECONDS);
+
+        UUID eventId = null;
+        long deadline = System.currentTimeMillis() + 30_000;
+        while (eventId == null && System.currentTimeMillis() < deadline) {
+            List<UUID> eventIds =
+                    jdbc.queryForList("select id from outbox where topic = 'sim.ordered.dead-letter'", UUID.class);
+            if (!eventIds.isEmpty()) {
+                eventId = eventIds.get(0);
+            }
+            if (eventId == null) {
+                Thread.sleep(100);
+            }
+        }
+        assertNotNull(eventId);
+
+        ConsumerRecord<String, String> record = awaitRecord("sim.ordered.dead-letter", eventId);
+        JsonNode event = new ObjectMapper().readTree(record.value());
+
+        assertEquals(eventId, UUID.fromString(event.get("eventId").asText()));
+        assertEquals("message is empty", event.get("reason").asText());
+        assertTrue(event.get("payload").isNull());
     }
 
     private ConsumerRecord<String, String> awaitRecord(String topic, UUID expectedEventId) throws Exception {

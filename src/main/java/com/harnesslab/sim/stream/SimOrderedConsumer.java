@@ -4,6 +4,7 @@ import com.harnesslab.sim.service.SimActivationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,7 +18,7 @@ public class SimOrderedConsumer {
     }
 
     @KafkaListener(topics = "sim.ordered", groupId = "sim-service")
-    public void onSimOrdered(String message) {
+    public void onSimOrdered(@Payload(required = false) String message) {
         log.info("sim.ordered received");
         service.handleOrdered(message);
     }

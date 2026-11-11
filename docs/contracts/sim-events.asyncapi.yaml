@@ -56,8 +56,9 @@ components:
       payload:
         type: object
         additionalProperties: false
-        required: [reason, payload]
+        required: [eventId, reason, payload]
         properties:
+          eventId: {type: string, format: uuid, description: Same value on a redelivery; consumers drop duplicates by it.}
           reason: {type: string, description: Why the message was rejected.}
           payload: {type: [string, 'null'], description: The original message exactly as received.}
     SimActivated:
