@@ -23,4 +23,4 @@
 Synthetic values only: ICCIDs like `8949000000000000001`, MSISDNs like `491700000001`. Never real numbers.
 
 ## Deleting a test
-Only when the criterion it proves is retired. Move the ID to "Retired criteria" in the spec with its replacement, and say so in the pull request. Deleting a test to make the build green is never allowed.
+Only when the behaviour it proves is intentionally changed. If that behaviour is a spec criterion, retire it in the spec. Say so in the pull request. Deleting a test to make the build green is never allowed.

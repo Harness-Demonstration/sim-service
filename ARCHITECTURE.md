@@ -16,7 +16,7 @@ The one hard problem is that announcement: billing must never miss an activation
 
 ## Code Map
 
-All code lives under `com.harnesslab.sim`. Dependencies point down this list: `api` and `stream` use `service`, `service` uses `repository`, everything may use `types`.
+All code lives under `com.harnesslab.sim`. Dependencies point down this list: `api` and `stream` use `service`, `service` uses `repository`, everything may use `types`. Enforced by `LayerRulesTest.layers_depend_in_one_direction`.
 
 ### `types`
 
@@ -25,6 +25,8 @@ Plain records shared by all layers: `Sim`, the incoming `SimOrdered`, the outgoi
 ### `config`
 
 Spring beans: the `Clock` used everywhere instead of `Instant.now()`, and scheduling for the relay.
+
+**Architecture Invariant:** no code calls `Instant.now()`; time comes from the injected `Clock`. Enforced by `LayerRulesTest.no_wall_clock`.
 
 ### `repository`
 
@@ -38,7 +40,7 @@ Persistence behind interfaces that `service` uses: `SimRepository` and `OutboxRe
 
 Every business decision. `SimActivationService` registers ordered SIMs and activates them: it locks the SIM row, sets the activation time and writes the outbox row in one transaction. `OutboxRelayService` selects pending outbox rows, hands them to a publisher and marks the acknowledged ones as sent.
 
-**Architecture Invariant:** `service` never talks to Kafka. It sees only the `SimEventPublisher` interface, implemented in `stream`.
+**Architecture Invariant:** `service` never talks to Kafka. It sees only the `SimEventPublisher` interface, implemented in `stream`. Enforced by `LayerRulesTest.service_does_not_use_kafka`.
 
 ### `stream`
 
@@ -60,7 +62,7 @@ Every event goes through the outbox. Delivery is at least once; every `sim.activ
 
 ### Testing
 
-Business rules are tested in `service` with in-class fakes and a fixed `Clock`. Anything that touches SQL, transactions or Kafka runs against real PostgreSQL and Kafka from Testcontainers. Naming and versions: `docs/testing.md`.
+Business rules are tested in `service` with in-class fakes and a fixed `Clock`. Anything that touches SQL, transactions or Kafka runs against real PostgreSQL and Kafka from Testcontainers. Naming and versions: `docs/testing.md`. The knowledge base itself is checked by `scripts/check-docs.sh` in CI.
 
 ### Error handling
 

@@ -8,6 +8,8 @@ A state change in PostgreSQL and the Kafka event that announces it cannot be wri
 - Publish first, then save: the save fails, billing charges, this service does not see the SIM as active, and nothing repairs it.
 
 ## Rule
+This is the Transactional outbox pattern as described on microservices.io, with the relay implemented as a polling publisher.
+
 The state change and an outbox row are written in the same database transaction. A separate relay reads committed outbox rows and publishes them to Kafka. `service` never talks to Kafka.
 
 ## Write path
@@ -39,6 +41,9 @@ The transaction is still open while the relay waits for Kafka, at most the ackno
 
 ### Where the relay code lives
 The layer rules apply. The scheduled trigger and the Kafka publisher live in `stream`. Reading and marking outbox rows is a `service` method that uses a repository. `stream` calls that service method and passes the publisher.
+
+## Ordering
+The pattern normally keeps the order in which the application wrote the events. Here a failed row is retried in a later run, after newer rows may already be sent, so order is not guaranteed. Today every SIM has a single activation event, so this does not matter yet; it is tracked in `docs/exec-plans/tech-debt-tracker.md`.
 
 ## Delivery guarantee
 At least once. If the relay publishes and then crashes before setting `sent_at`, the next run publishes the row again. Consumers must drop duplicates by `eventId`; every event carries it.

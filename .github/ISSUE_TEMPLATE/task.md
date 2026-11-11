@@ -9,8 +9,12 @@ labels: ''
 The problem or the change, in plain words. Who needs it and why.
 
 ## Acceptance criteria
-Plain sentences a reviewer can check. No IDs; they are assigned in the spec.
+Plain sentences a reviewer can check.
 - 
+- 
+
+## Pointers (optional)
+Files, documents or earlier pull requests that are a good starting point.
 - 
 
 ## Out of scope
