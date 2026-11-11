@@ -15,6 +15,7 @@ import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
 import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
+import com.harnesslab.sim.types.SimOrderedRejected;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -181,6 +182,55 @@ class SimActivationServiceTest {
 
         assertEquals(1, sent);
         assertEquals(1, outbox.events.stream().filter(event -> event.sentAt() == null).count());
+    }
+
+    @Test
+    void a12_a_message_with_missing_or_malformed_iccid_or_msisdn_is_not_stored() {
+        String[] bad = {
+            "{\"msisdn\":\"491700000002\",\"orderId\":\"o\"}",
+            "{\"iccid\":\"abc\",\"msisdn\":\"491700000002\",\"orderId\":\"o\"}",
+            "{\"iccid\":\"8949000000000000002\",\"orderId\":\"o\"}",
+            "{\"iccid\":\"8949000000000000002\",\"msisdn\":\"12\",\"orderId\":\"o\"}",
+            "{\"iccid\":8949000000000000002,\"msisdn\":\"491700000002\",\"orderId\":\"o\"}"
+        };
+        for (String message : bad) {
+            service.handleOrdered(message);
+        }
+
+        assertEquals(1, repository.sims.size());
+        assertEquals(bad.length, outbox.events.size());
+    }
+
+    @Test
+    void a13_a_rejected_message_goes_unchanged_with_its_reason_to_the_dead_letter_topic() throws Exception {
+        String message = "{\"iccid\":\"abc\",\"msisdn\":\"491700000002\",\"orderId\":\"o\"}";
+
+        service.handleOrdered(message);
+
+        OutboxEvent row = outbox.events.get(0);
+        assertEquals("sim.ordered.dead-letter", row.topic());
+        SimOrderedRejected rejected = MAPPER.readValue(row.payload(), SimOrderedRejected.class);
+        assertEquals(message, rejected.payload());
+        assertEquals("iccid is malformed", rejected.reason());
+    }
+
+    @Test
+    void a13_a_message_that_is_not_json_goes_to_the_dead_letter_topic() throws Exception {
+        service.handleOrdered("{not json");
+
+        SimOrderedRejected rejected = MAPPER.readValue(outbox.events.get(0).payload(), SimOrderedRejected.class);
+        assertEquals("{not json", rejected.payload());
+        assertEquals("message is not valid JSON", rejected.reason());
+    }
+
+    @Test
+    void a13_a_valid_message_after_a_rejected_one_is_still_stored() {
+        service.handleOrdered("{not json");
+        service.handleOrdered(
+                "{\"iccid\":\"8949000000000000002\",\"msisdn\":\"491700000002\",\"orderId\":\"o\"}");
+
+        assertEquals(2, repository.sims.size());
+        assertEquals(1, outbox.events.size());
     }
 
     private static SimEventPublisher recording(List<OutboxEvent> published) {

@@ -9,6 +9,11 @@ channels:
     messages:
       SimOrdered:
         $ref: '#/components/messages/SimOrdered'
+  simOrderedDeadLetter:
+    address: sim.ordered.dead-letter
+    messages:
+      SimOrderedRejected:
+        $ref: '#/components/messages/SimOrderedRejected'
   simActivated:
     address: sim.activated
     messages:
@@ -24,6 +29,10 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/simOrdered'
+  publishSimOrderedRejected:
+    action: send
+    channel:
+      $ref: '#/channels/simOrderedDeadLetter'
   publishSimActivated:
     action: send
     channel:
@@ -39,9 +48,18 @@ components:
         type: object
         required: [iccid, msisdn, orderId]
         properties:
-          iccid: {type: string}
-          msisdn: {type: string}
+          iccid: {type: string, pattern: '^[0-9]{19,20}$'}
+          msisdn: {type: string, pattern: '^[0-9]{7,15}$'}
           orderId: {type: string}
+    SimOrderedRejected:
+      description: A sim.ordered message that was not stored because it is not valid JSON or its ICCID or MSISDN is missing or malformed. Operations fix it and replay it.
+      payload:
+        type: object
+        additionalProperties: false
+        required: [reason, payload]
+        properties:
+          reason: {type: string, description: Why the message was rejected.}
+          payload: {type: [string, 'null'], description: The original message exactly as received.}
     SimActivated:
       payload:
         type: object

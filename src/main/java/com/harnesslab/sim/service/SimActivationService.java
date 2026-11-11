@@ -1,6 +1,7 @@
 package com.harnesslab.sim.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harnesslab.sim.repository.OutboxRepository;
 import com.harnesslab.sim.repository.SimRepository;
@@ -9,9 +10,11 @@ import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
 import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
+import com.harnesslab.sim.types.SimOrderedRejected;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,12 @@ public class SimActivationService {
     static final String SIM_ACTIVATED_TOPIC = "sim.activated";
 
     static final String SIM_DEACTIVATED_TOPIC = "sim.deactivated";
+
+    static final String SIM_ORDERED_DEAD_LETTER_TOPIC = "sim.ordered.dead-letter";
+
+    private static final Pattern ICCID_FORMAT = Pattern.compile("\\d{19,20}");
+
+    private static final Pattern MSISDN_FORMAT = Pattern.compile("\\d{7,15}");
 
     private final SimRepository repository;
     private final OutboxRepository outbox;
@@ -33,6 +42,62 @@ public class SimActivationService {
         this.outbox = outbox;
         this.objectMapper = objectMapper;
         this.clock = clock;
+    }
+
+    /** Registers a raw sim.ordered message, or keeps it aside in the dead-letter topic with the reason. */
+    public void handleOrdered(String rawMessage) {
+        String reason = null;
+        SimOrdered order = null;
+        try {
+            JsonNode node = rawMessage == null ? null : objectMapper.readTree(rawMessage);
+            if (node == null || node.isMissingNode() || node.isNull()) {
+                reason = "message is empty";
+            } else if (!node.isObject()) {
+                reason = "message is not a JSON object";
+            } else {
+                reason = invalidReason(node, "iccid", ICCID_FORMAT);
+                if (reason == null) {
+                    reason = invalidReason(node, "msisdn", MSISDN_FORMAT);
+                }
+                if (reason == null) {
+                    JsonNode orderId = node.get("orderId");
+                    order = new SimOrdered(
+                            node.get("iccid").asText(),
+                            node.get("msisdn").asText(),
+                            orderId != null && orderId.isTextual() ? orderId.asText() : null);
+                }
+            }
+        } catch (JsonProcessingException exception) {
+            reason = "message is not valid JSON";
+        }
+        if (order != null) {
+            registerOrdered(order);
+        } else {
+            deadLetter(rawMessage, reason);
+        }
+    }
+
+    private static String invalidReason(JsonNode node, String field, Pattern format) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return field + " is missing";
+        }
+        if (!value.isTextual() || !format.matcher(value.asText()).matches()) {
+            return field + " is malformed";
+        }
+        return null;
+    }
+
+    private void deadLetter(String rawMessage, String reason) {
+        UUID eventId = UUID.randomUUID();
+        outbox.save(new OutboxEvent(
+                eventId,
+                eventId.toString(),
+                SIM_ORDERED_DEAD_LETTER_TOPIC,
+                toJson(new SimOrderedRejected(reason, rawMessage)),
+                clock.instant(),
+                null,
+                1));
     }
 
     public synchronized void registerOrdered(SimOrdered order) {

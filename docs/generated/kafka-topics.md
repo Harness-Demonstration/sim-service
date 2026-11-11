@@ -6,6 +6,7 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 
 * [Operations](#operations)
   * [RECEIVE sim.ordered](#receive-simordered-operation)
+  * [SEND sim.ordered.dead-letter](#send-simordereddead-letter-operation)
   * [SEND sim.activated](#send-simactivated-operation)
   * [SEND sim.deactivated](#send-simdeactivated-operation)
 
@@ -22,8 +23,8 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 | Name | Type | Description | Value | Constraints | Notes |
 |---|---|---|---|---|---|
 | (root) | object | - | - | - | **additional properties are allowed** |
-| iccid | string | - | - | - | **required** |
-| msisdn | string | - | - | - | **required** |
+| iccid | string | - | - | pattern (`^[0-9]{19,20}$`) | **required** |
+| msisdn | string | - | - | pattern (`^[0-9]{7,15}$`) | **required** |
 | orderId | string | - | - | - | **required** |
 
 > Examples of payload _(generated)_
@@ -33,6 +34,33 @@ Messages sim-service consumes and publishes. Change this file before the Java co
   "iccid": "string",
   "msisdn": "string",
   "orderId": "string"
+}
+```
+
+
+
+### SEND `sim.ordered.dead-letter` Operation
+
+* Operation ID: `publishSimOrderedRejected`
+
+#### Message `SimOrderedRejected`
+
+A sim.ordered message that was not stored because it is not valid JSON or its ICCID or MSISDN is missing or malformed. Operations fix it and replay it.
+
+##### Payload
+
+| Name | Type | Description | Value | Constraints | Notes |
+|---|---|---|---|---|---|
+| (root) | object | - | - | - | **additional properties are NOT allowed** |
+| reason | string | Why the message was rejected. | - | - | **required** |
+| payload | string \| null | The original message exactly as received. | - | - | **required** |
+
+> Examples of payload _(generated)_
+
+```json
+{
+  "reason": "string",
+  "payload": "string"
 }
 ```
 
