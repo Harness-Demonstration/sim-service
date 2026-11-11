@@ -20,3 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: scripts/check-docs.sh
+
+  generated-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.11.0'
+      - run: scripts/generate-docs.sh
+      - run: git add --intent-to-add docs/generated
+      - run: git diff --exit-code -- docs/generated || (echo "::error::docs/generated is out of date. FIX - run scripts/generate-docs.sh and commit the result." && exit 1)
