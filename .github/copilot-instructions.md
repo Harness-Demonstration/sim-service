@@ -38,4 +38,4 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 - Never delete or weaken a test to make the build green. A test is removed only when the behaviour it proves is intentionally changed, and the pull request says so.
 - Never put real phone numbers or ICCIDs in tests.
 - Never change the shape of a Kafka message without saying so in the pull request; other services read it.
-- Never edit files in `docs/generated/` by hand; regenerate them from their source contract.
+- Never edit files in `docs/generated/` by hand; regenerate them with `scripts/check-generated-docs.sh --update`.

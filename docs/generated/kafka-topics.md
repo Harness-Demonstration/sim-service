@@ -63,6 +63,3 @@ Messages sim-service consumes and publishes. Change this file before the Java co
   "activatedAt": "2019-08-24T14:15:22Z"
 }
 ```
-
-
-
