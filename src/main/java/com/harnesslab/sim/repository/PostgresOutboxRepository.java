@@ -1,10 +1,14 @@
 package com.harnesslab.sim.repository;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harnesslab.sim.types.OutboxEvent;
 import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -14,17 +18,26 @@ public class PostgresOutboxRepository implements OutboxRepository {
 
     private final JpaOutboxEntityRepository jpaRepository;
     private final Tracer tracer;
+    private final Propagator propagator;
+    private final ObjectMapper objectMapper;
 
-    public PostgresOutboxRepository(JpaOutboxEntityRepository jpaRepository, ObjectProvider<Tracer> tracer) {
+    /** Without tracing (for example in tests) there is no Propagator bean; Propagator.NOOP writes no headers. */
+    public PostgresOutboxRepository(
+            JpaOutboxEntityRepository jpaRepository,
+            Tracer tracer,
+            ObjectProvider<Propagator> propagator,
+            ObjectMapper objectMapper) {
         this.jpaRepository = jpaRepository;
-        this.tracer = tracer.getIfAvailable(() -> Tracer.NOOP);
+        this.tracer = tracer;
+        this.propagator = propagator.getIfAvailable(() -> Propagator.NOOP);
+        this.objectMapper = objectMapper;
     }
 
-    /** A new row remembers the current span as its traceParent; an existing row keeps the one it has. */
+    /** A new row stores the trace headers of the current span; an existing row keeps the ones it has. */
     @Override
     public void save(OutboxEvent event) {
-        String traceParent = event.traceParent() != null ? event.traceParent() : currentTraceParent();
-        jpaRepository.save(new OutboxEntity(event, traceParent));
+        String traceContext = event.traceContext() != null ? event.traceContext() : currentTraceContext();
+        jpaRepository.save(new OutboxEntity(event, traceContext));
     }
 
     @Override
@@ -34,12 +47,20 @@ public class PostgresOutboxRepository implements OutboxRepository {
                 .toList();
     }
 
-    private String currentTraceParent() {
+    private String currentTraceContext() {
         Span span = tracer.currentSpan();
-        if (span == null || span.context().traceId().isEmpty()) {
+        if (span == null) {
             return null;
         }
-        TraceContext context = span.context();
-        return "00-" + context.traceId() + "-" + context.spanId() + "-" + (Boolean.TRUE.equals(context.sampled()) ? "01" : "00");
+        Map<String, String> headers = new LinkedHashMap<>();
+        propagator.inject(span.context(), headers, Map::put);
+        if (headers.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(headers);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Cannot serialize trace headers", exception);
+        }
     }
 }
