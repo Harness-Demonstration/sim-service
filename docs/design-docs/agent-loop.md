@@ -17,6 +17,7 @@ The human then checks the diff against the acceptance criteria, approves the wai
 - Each run looks at the pull request's current state and takes at most one step, so duplicate events are harmless.
 - The loop stops for good once `ready-for-human` is on the pull request. Remove the label and run the workflow by hand to restart it.
 - The workflow only uses triggers that run its definition from the default branch, never `pull_request_review` or `pull_request`, and never checks out pull request code. A pull request cannot change what runs with `AGENT_LOOP_TOKEN`.
+- `AGENT_LOOP_TOKEN` is stored only in the `agent-loop` environment, whose deployment branch rule allows `main` alone. Because of that lock, "Require approval for workflow runs" for Copilot can be off.
 - `AGENT_LOOP_TOKEN` is a fine-grained token of the human reviewer. Copilot only acts on `@copilot` comments from people with write access, and reviews requested with it count against that person's Copilot plan.
 
 ## Sources
