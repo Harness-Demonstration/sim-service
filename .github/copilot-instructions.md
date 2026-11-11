@@ -20,6 +20,7 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 | Planning a complex feature or a significant refactor | `docs/PLANS.md`, plans in `docs/exec-plans/` |
 | Known gaps we chose not to fix yet | `docs/exec-plans/tech-debt-tracker.md` |
 | Message shapes of `sim.ordered` and `sim.activated` | `docs/contracts/sim-events.asyncapi.yaml` |
+| How a trace continues through the outbox and Kafka | `docs/design-docs/tracing.md` |
 | Local PostgreSQL, Kafka and Jaeger | `infra/docker-compose.yml` |
 
 ## How to work

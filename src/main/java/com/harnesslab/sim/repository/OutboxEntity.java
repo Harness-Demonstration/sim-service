@@ -36,9 +36,12 @@ public class OutboxEntity {
     @Column(name = "sent_at")
     private Instant sentAt;
 
+    @Column(name = "trace_parent", length = 55)
+    private String traceParent;
+
     protected OutboxEntity() {}
 
-    OutboxEntity(OutboxEvent event) {
+    OutboxEntity(OutboxEvent event, String traceParent) {
         this.id = event.id();
         this.aggregateId = event.aggregateId();
         this.aggregateSequence = event.aggregateSequence();
@@ -46,9 +49,10 @@ public class OutboxEntity {
         this.payload = event.payload();
         this.createdAt = event.createdAt();
         this.sentAt = event.sentAt();
+        this.traceParent = traceParent;
     }
 
     OutboxEvent toDomain() {
-        return new OutboxEvent(id, aggregateId, topic, payload, createdAt, sentAt, aggregateSequence);
+        return new OutboxEvent(id, aggregateId, topic, payload, createdAt, sentAt, aggregateSequence, traceParent);
     }
 }
