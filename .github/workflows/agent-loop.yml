@@ -52,6 +52,7 @@ jobs:
     if: github.event_name != 'issues'
     runs-on: ubuntu-latest
     environment: agent-loop
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:

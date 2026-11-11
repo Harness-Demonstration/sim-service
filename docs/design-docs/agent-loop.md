@@ -7,7 +7,7 @@ Implemented by `.github/workflows/agent-loop.yml` and `scripts/agent-loop.sh`.
 1. **Triage.** A person opens an issue with one of two templates. *Agent task* adds the `agent-ready` label: a well-scoped change with plain acceptance criteria. *Human task* adds `needs-human`: production-critical, security-sensitive or still unclear work. Adding `agent-ready` later has the same effect.
 2. **Assign.** An `agent-ready` issue is assigned to the Copilot cloud agent with the model in `AGENT_MODEL`.
 3. **Write.** Copilot opens a pull request and works until it requests a review.
-4. **Review.** When Copilot has finished and no review covers its latest work, the loop requests a Copilot code review.
+4. **Review.** When Copilot has finished and no review covers its latest work, the loop requests a Copilot code review and waits in the same run (up to 10 minutes) until the review arrives. It does not rely on the run GitHub starts when the review finishes: that run is started by the reviewer bot and waits for approval.
 5. **Fix.** If the review has comments, the loop asks `@copilot` to fix each one or explain why not. Then step 4 runs again.
 6. **Hand over.** The loop marks the pull request ready, adds `ready-for-human` and mentions `HUMAN_REVIEWER` when a review has no comments, or when `MAX_FIX_ROUNDS` fix rounds are used up.
 
