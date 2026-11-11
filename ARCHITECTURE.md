@@ -38,13 +38,13 @@ Persistence behind interfaces that `service` uses: `SimRepository` and `OutboxRe
 
 ### `service`
 
-Every business decision. `SimActivationService` registers ordered SIMs and activates them: it locks the SIM row, sets the activation time and writes the outbox row in one transaction. `OutboxRelayService` selects pending outbox rows, hands them to a publisher and marks the acknowledged ones as sent.
+Every business decision. `SimActivationService` registers ordered SIMs and activates them: it parses and validates raw `sim.ordered` messages (`handleOrdered`), then locks the SIM row on activation, sets the activation time and writes the outbox row in one transaction. `OutboxRelayService` selects pending outbox rows, hands them to a publisher and marks the acknowledged ones as sent.
 
 **Architecture Invariant:** `service` never talks to Kafka. It sees only the `SimEventPublisher` interface, implemented in `stream`. Enforced by `LayerRulesTest.service_does_not_use_kafka`.
 
 ### `stream`
 
-Kafka in both directions. `SimOrderedConsumer` turns a message into a `SimOrdered` record and calls one service method. `KafkaSimEventPublisher` sends outbox payloads and returns Kafka's acknowledgement. `OutboxRelay` triggers the relay every second.
+Kafka in both directions. `SimOrderedConsumer` forwards the raw message text to one service method; parsing and validation into a `SimOrdered` record happen in `SimActivationService.handleOrdered`. `KafkaSimEventPublisher` sends outbox payloads and returns Kafka's acknowledgement. `OutboxRelay` triggers the relay every second.
 
 **Architecture Invariant:** no business logic here, and no access to `repository`. Enforced by `LayerRulesTest`.
 
