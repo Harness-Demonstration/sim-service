@@ -9,6 +9,11 @@ channels:
     messages:
       SimOrdered:
         $ref: '#/components/messages/SimOrdered'
+  simOrderedDeadLetter:
+    address: sim.ordered.dlt
+    messages:
+      SimOrderedDeadLetter:
+        $ref: '#/components/messages/SimOrderedDeadLetter'
   simActivated:
     address: sim.activated
     messages:
@@ -24,6 +29,10 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/simOrdered'
+  publishSimOrderedDeadLetter:
+    action: send
+    channel:
+      $ref: '#/channels/simOrderedDeadLetter'
   publishSimActivated:
     action: send
     channel:
@@ -39,9 +48,23 @@ components:
         type: object
         required: [iccid, msisdn, orderId]
         properties:
-          iccid: {type: string}
-          msisdn: {type: string}
+          iccid: {type: string, pattern: '^[0-9]{19,20}$'}
+          msisdn: {type: string, pattern: '^[1-9][0-9]{0,14}$'}
           orderId: {type: string}
+    SimOrderedDeadLetter:
+      contentType: application/octet-stream
+      description: >
+        Original sim.ordered value bytes and key, unchanged (including a null value).
+        Delivery is at least once; eventId identifies outbox redeliveries. Reprocessing an
+        input record after a consumer restart can create a new eventId.
+      headers:
+        type: object
+        required: [reason, eventId]
+        properties:
+          reason: {type: string, description: UTF-8 explanation of the rejection.}
+          eventId: {type: string, format: uuid, description: UTF-8 identifier stable across redeliveries.}
+      payload:
+        description: Original Kafka value bytes, which may not be valid JSON or UTF-8, or may be null.
     SimActivated:
       payload:
         type: object

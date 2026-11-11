@@ -47,7 +47,7 @@ The layer rules apply. The scheduled trigger and the Kafka publisher live in `st
 Every event has an increasing `aggregate_sequence`. The relay does not claim an event while an earlier sequence for that aggregate is pending, so a failed activation blocks deactivation (including across relay instances and retries). Once the earlier event is acknowledged and committed, the next sequence is eligible in a later run. Events for different aggregates can still be published concurrently.
 
 ## Delivery guarantee
-At least once. If the relay publishes and then crashes before setting `sent_at`, the next run publishes the row again. Consumers must drop duplicates by `eventId`; every event carries it.
+At least once. If the relay publishes and then crashes before setting `sent_at`, the next run publishes the row again. Consumers must drop duplicates by `eventId`; every event carries it. Dead-letter records carry the ID in a Kafka header, alongside the reason, so their original value bytes and key remain unchanged. The outbox stores these bytes encoded in a JSON envelope until the relay publishes them.
 
 ## Failure cases
 | What fails | Result |

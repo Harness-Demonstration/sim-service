@@ -105,6 +105,26 @@ class MessageContractTest {
         assertEquals(new SimOrdered(ICCID, MSISDN, "order-1"), read(json));
     }
 
+    @Test
+    void sim_ordered_contract_rejects_malformed_identifiers() throws Exception {
+        assertTrue(!schema("SimOrdered").validate(
+                "{\"iccid\":\"123\",\"msisdn\":\"" + MSISDN + "\",\"orderId\":\"order-1\"}", InputFormat.JSON).isEmpty());
+        assertTrue(!schema("SimOrdered").validate(
+                "{\"iccid\":\"" + ICCID + "\",\"msisdn\":\"+491700000001\",\"orderId\":\"order-1\"}", InputFormat.JSON).isEmpty());
+    }
+
+    @Test
+    void dead_letter_headers_match_the_contract() throws Exception {
+        JsonNode headers = new ObjectMapper(new YAMLFactory())
+                .readTree(Files.readString(CONTRACT))
+                .at("/components/messages/SimOrderedDeadLetter/headers");
+        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                .getSchema(headers, SchemaValidatorsConfig.builder().formatAssertionsEnabled(true).build());
+        assertTrue(schema.validate("{\"reason\":\"Invalid JSON\",\"eventId\":\"550e8400-e29b-41d4-a716-446655440000\"}",
+                InputFormat.JSON).isEmpty());
+        assertTrue(!schema.validate("{\"reason\":\"Invalid JSON\"}", InputFormat.JSON).isEmpty());
+    }
+
     private static ObjectMapper springObjectMapper() {
         ObjectMapper[] holder = new ObjectMapper[1];
         new ApplicationContextRunner()
