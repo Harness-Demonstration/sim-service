@@ -32,5 +32,7 @@ for folder in docs/design-docs docs/product-specs; do
   done
 done
 
+scripts/check-generated-docs.sh || error "Generated Kafka topic documentation is out of date."
+
 [ "$fail" -eq 0 ] && echo "docs check passed"
 exit "$fail"

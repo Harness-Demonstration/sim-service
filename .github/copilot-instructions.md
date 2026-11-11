@@ -16,6 +16,8 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 | Lasting behaviour the service guarantees, with IDs (A1, A2 ...) | `docs/product-specs/index.md` |
 | Design decisions, for example how events are published | `docs/design-docs/index.md` |
 | How to name and write tests, Testcontainers versions | `docs/testing.md` |
+| Kafka message contract | `docs/contracts/sim-events.asyncapi.yaml` |
+| Generated Kafka topic documentation | `docs/generated/kafka-topics.md` |
 | Planning a complex feature or a significant refactor | `docs/PLANS.md`, plans in `docs/exec-plans/` |
 | Known gaps we chose not to fix yet | `docs/exec-plans/tech-debt-tracker.md` |
 | Local PostgreSQL, Kafka and Jaeger | `infra/docker-compose.yml` |
@@ -30,8 +32,10 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 7. Before you open or update the pull request, run `./mvnw -q verify` (needs Docker for Testcontainers) and `scripts/check-docs.sh`.
 8. In the pull request description, list each acceptance criterion with the test that proves it.
 9. If you add a document under `docs/`, link it from the matching `index.md` or from this map.
+10. Change Kafka message shapes in `docs/contracts/sim-events.asyncapi.yaml` before changing Java code.
 
 ## Never
 - Never delete or weaken a test to make the build green. A test is removed only when the behaviour it proves is intentionally changed, and the pull request says so.
 - Never put real phone numbers or ICCIDs in tests.
 - Never change the shape of a Kafka message without saying so in the pull request; other services read it.
+- Never edit files in `docs/generated/` by hand; regenerate them from their source contract.
