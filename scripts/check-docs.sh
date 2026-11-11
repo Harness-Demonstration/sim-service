@@ -32,5 +32,17 @@ for folder in docs/design-docs docs/product-specs; do
   done
 done
 
+# docs/generated/ is regenerated from the contract; a committed file that differs was edited by hand or is stale.
+if [ "${CHECK_GENERATED:-0}" = 1 ]; then
+  tmp=$(mktemp -d)
+  if scripts/generate-docs.sh "$tmp" >/dev/null 2>&1; then
+    diff -q "$tmp/kafka-topics.md" docs/generated/kafka-topics.md >/dev/null 2>&1 \
+      || error "docs/generated/kafka-topics.md differs from a fresh generation. FIX: run scripts/generate-docs.sh and commit the result; never edit docs/generated/ by hand."
+  else
+    error "scripts/generate-docs.sh failed. FIX: run it locally and read the output."
+  fi
+  rm -rf "$tmp"
+fi
+
 [ "$fail" -eq 0 ] && echo "docs check passed"
 exit "$fail"
