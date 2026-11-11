@@ -23,6 +23,7 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A9 | Deactivating the same SIM twice publishes once and answers like the first call. | done |
 | A10 | Deactivating a SIM that was never activated returns 409 and publishes nothing; an unknown ICCID returns 404 and publishes nothing. | done |
 | A11 | A deactivation and its `sim.deactivated` event are either both recorded or neither is. | done |
+| A12 | An ordered message with a missing or malformed ICCID or MSISDN, or unreadable JSON, is not registered and is delivered to `sim.ordered.dlt` unchanged with a rejection reason; subsequent valid orders are registered. | done |
 
 
 ## Retired criteria
