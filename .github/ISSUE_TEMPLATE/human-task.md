@@ -1,8 +1,8 @@
 ---
-name: Task
-about: A change to sim-service, for a person or for Copilot
+name: Human task
+about: Production-critical, security-sensitive or still unclear work; a person owns it
 title: ''
-labels: ''
+labels: needs-human
 ---
 
 ## What and why
