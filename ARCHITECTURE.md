@@ -70,7 +70,7 @@ Unknown SIMs raise `SimNotFoundException`, mapped to 404. A failed Kafka send ne
 
 ### Observability
 
-Logs only, for now. Tracing across Kafka is planned.
+Micrometer Tracing with OpenTelemetry, exported to Jaeger. The span that writes an outbox row is stored with it, and the relay continues that trace when it publishes, so one trace runs from the REST request through Kafka into billing (see `docs/design-docs/tracing.md`).
 
 ### Configuration
 

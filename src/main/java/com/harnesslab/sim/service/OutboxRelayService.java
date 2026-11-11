@@ -56,7 +56,8 @@ public class OutboxRelayService {
                     event.payload(),
                     event.createdAt(),
                     clock.instant(),
-                    event.aggregateSequence()));
+                    event.aggregateSequence(),
+                    event.traceContext()));
             sent++;
         }
         return sent;
