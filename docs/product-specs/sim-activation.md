@@ -19,6 +19,10 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A5 | If Kafka is down, no activation event is lost; it is delivered once Kafka is back, without anyone calling `activate` again. | done |
 | A6 | Two running instances of the service never publish the same event at the same time. | done |
 | A7 | Every `sim.activated` event carries an `eventId` that tells it apart from a duplicate of itself, so billing can ignore duplicates. | done |
+| A8 | Deactivating an active SIM publishes one `sim.deactivated` event with `eventId`, ICCID, MSISDN and the deactivation time from the injected Clock, so billing can stop charging. | done |
+| A9 | Deactivating the same SIM twice publishes once and answers like the first call. | done |
+| A10 | Deactivating a SIM that was never activated returns 409 and publishes nothing; an unknown ICCID returns 404 and publishes nothing. | done |
+| A11 | A deactivation and its `sim.deactivated` event are either both recorded or neither is. | done |
 
 
 ## Retired criteria

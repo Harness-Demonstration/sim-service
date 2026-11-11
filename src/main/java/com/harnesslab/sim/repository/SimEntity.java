@@ -21,15 +21,19 @@ public class SimEntity {
     @Column(name = "activated_at")
     private Instant activatedAt;
 
+    @Column(name = "deactivated_at")
+    private Instant deactivatedAt;
+
     protected SimEntity() {}
 
     SimEntity(Sim sim) {
         this.iccid = sim.iccid();
         this.msisdn = sim.msisdn();
         this.activatedAt = sim.activatedAt();
+        this.deactivatedAt = sim.deactivatedAt();
     }
 
     Sim toDomain() {
-        return new Sim(iccid, msisdn, activatedAt);
+        return new Sim(iccid, msisdn, activatedAt, deactivatedAt);
     }
 }

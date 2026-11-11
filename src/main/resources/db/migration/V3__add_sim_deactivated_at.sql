@@ -1,0 +1,1 @@
+ALTER TABLE sim ADD COLUMN deactivated_at TIMESTAMPTZ;

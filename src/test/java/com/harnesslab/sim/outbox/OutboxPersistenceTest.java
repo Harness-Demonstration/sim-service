@@ -148,4 +148,25 @@ class OutboxPersistenceTest {
         assertEquals(2, jdbc.queryForObject(
                 "select count(distinct payload->>'eventId') from outbox", Integer.class));
     }
+
+    @Test
+    void a11_failing_outbox_insert_leaves_the_sim_activated() {
+        service.activate(ICCID);
+        doThrow(new IllegalStateException("outbox insert failed")).when(outbox).save(any());
+
+        assertThrows(RuntimeException.class, () -> service.deactivate(ICCID));
+
+        assertNull(simRepository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+        assertEquals(1, jdbc.queryForObject("select count(*) from outbox", Integer.class));
+    }
+
+    @Test
+    void a11_deactivation_and_outbox_row_are_committed_together() {
+        service.activate(ICCID);
+        service.deactivate(ICCID);
+
+        assertNotNull(simRepository.findByIccid(ICCID).orElseThrow().deactivatedAt());
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from outbox where topic = 'sim.deactivated'", Integer.class));
+    }
 }

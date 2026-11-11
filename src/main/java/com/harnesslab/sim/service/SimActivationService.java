@@ -7,6 +7,7 @@ import com.harnesslab.sim.repository.SimRepository;
 import com.harnesslab.sim.types.OutboxEvent;
 import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
+import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
 import java.time.Clock;
 import java.time.Instant;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class SimActivationService {
 
     static final String SIM_ACTIVATED_TOPIC = "sim.activated";
+
+    static final String SIM_DEACTIVATED_TOPIC = "sim.deactivated";
 
     private final SimRepository repository;
     private final OutboxRepository outbox;
@@ -46,7 +49,7 @@ public class SimActivationService {
         }
 
         Instant activatedAt = clock.instant();
-        repository.save(new Sim(sim.iccid(), sim.msisdn(), activatedAt));
+        repository.save(new Sim(sim.iccid(), sim.msisdn(), activatedAt, null));
         UUID eventId = UUID.randomUUID();
         outbox.save(new OutboxEvent(
                 eventId,
@@ -57,11 +60,33 @@ public class SimActivationService {
                 null));
     }
 
-    private String toJson(SimActivated event) {
+    @Transactional
+    public void deactivate(String iccid) {
+        Sim sim = repository.findByIccidForUpdate(iccid).orElseThrow(() -> new SimNotFoundException(iccid));
+        if (sim.deactivatedAt() != null) {
+            return;
+        }
+        if (sim.activatedAt() == null) {
+            throw new SimNotActivatedException(iccid);
+        }
+
+        Instant deactivatedAt = clock.instant();
+        repository.save(new Sim(sim.iccid(), sim.msisdn(), sim.activatedAt(), deactivatedAt));
+        UUID eventId = UUID.randomUUID();
+        outbox.save(new OutboxEvent(
+                eventId,
+                sim.iccid(),
+                SIM_DEACTIVATED_TOPIC,
+                toJson(new SimDeactivated(eventId, sim.iccid(), sim.msisdn(), deactivatedAt)),
+                deactivatedAt,
+                null));
+    }
+
+    private String toJson(Object event) {
         try {
             return objectMapper.writeValueAsString(event);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Cannot serialise sim.activated", exception);
+            throw new IllegalStateException("Cannot serialise " + event.getClass().getSimpleName(), exception);
         }
     }
 }
