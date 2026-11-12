@@ -3,6 +3,13 @@ on:
   push:
     branches: [main]
   pull_request:
+# A new push to the same pull request cancels the run for the older commit; only the latest commit's
+# result counts for the ruleset and the agent loop. Every other run (main, schedule, manual) gets its own
+# group, so it is never cancelled or left waiting.
+concurrency:
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
