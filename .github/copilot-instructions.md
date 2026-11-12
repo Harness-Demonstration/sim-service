@@ -13,7 +13,7 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 |---|---|
 | Packages, what may depend on what, invariants | `ARCHITECTURE.md` |
 | How we work with agents | `docs/design-docs/core-beliefs.md` |
-| How issues reach you and how reviews come back | `docs/design-docs/agent-loop.md` |
+| How issues reach you and how reviews come back | https://github.com/Harness-Demonstration/harness/blob/main/docs/agent-loop.md |
 | Lasting behaviour the service guarantees, with IDs (A1, A2 ...) | `docs/product-specs/index.md` |
 | Design decisions, for example how events are published | `docs/design-docs/index.md` |
 | How to name and write tests, Testcontainers versions | `docs/testing.md` |
