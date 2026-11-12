@@ -34,3 +34,7 @@ jobs:
       verify-command: ./mvnw -q verify and scripts/check-docs.sh
       max-fix-rounds: ${{ vars.AGENT_MAX_FIX_ROUNDS || '1' }}
       pr: ${{ inputs.pr }}
+    # Passed by name although it exists only in the agent-loop environment; without this line the
+    # reusable workflow sees an empty string.
+    secrets:
+      AGENT_LOOP_TOKEN: ${{ secrets.AGENT_LOOP_TOKEN }}
