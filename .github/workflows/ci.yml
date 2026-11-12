@@ -54,3 +54,16 @@ jobs:
         env:
           SIM_EVENTS_CONTRACT: ${{ github.workspace }}/docs/contracts/sim-events.asyncapi.yaml
         run: ./mvnw -B test -Dtest=MessageContractTest
+
+  # Fails a pull request that adds a dependency with a known high or critical vulnerability
+  # (GitHub Advisory Database). Required by the default-branch ruleset.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
