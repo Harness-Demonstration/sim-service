@@ -1,0 +1,6 @@
+# A person must approve every change to these paths, also when Copilot made it.
+# Code owner review is turned on by the default-branch ruleset in Harness-Demonstration/harness.
+/docs/contracts/                   @rsercano
+/src/main/resources/db/migration/  @rsercano
+/.github/                          @rsercano
+/scripts/                          @rsercano
