@@ -13,6 +13,7 @@
 | Repository and outbox | real PostgreSQL from Testcontainers, Flyway migrations applied | anything that touches SQL or transactions |
 | Kafka integration | real Kafka from Testcontainers | the relay and consumers |
 | Contract | JSON Schema from the AsyncAPI contract, `MessageContractTest` | every message shape the service sends or reads |
+| Consumer contract | CI job `consumer-contracts` runs billing-service's `MessageContractTest` against this pull request's contract | a contract change that breaks billing-service |
 | Architecture | ArchUnit in `LayerRulesTest` | every build |
 
 ## Testcontainers
