@@ -11,11 +11,9 @@ import com.harnesslab.sim.types.Sim;
 import com.harnesslab.sim.types.SimActivated;
 import com.harnesslab.sim.types.SimDeactivated;
 import com.harnesslab.sim.types.SimOrdered;
-import com.harnesslab.sim.types.SimOrderedDeadLetter;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,45 +45,30 @@ public class SimActivationService {
     }
 
     @Transactional
-    public void registerOrderedMessage(byte[] value, byte[] key) {
+    public void registerOrderedMessage(byte[] value) {
         JsonNode json;
         try {
             json = value == null ? null : objectMapper.reader()
                     .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(value);
         } catch (IOException exception) {
-            rejectOrder(value, key, "Invalid JSON");
-            return;
+            throw new InvalidSimOrderException("Invalid JSON");
         }
         if (json == null || !json.isObject()) {
-            rejectOrder(value, key, "Expected a JSON object");
-            return;
+            throw new InvalidSimOrderException("Expected a JSON object");
         }
         JsonNode iccid = json.get("iccid");
         JsonNode msisdn = json.get("msisdn");
         if (iccid == null || !iccid.isTextual() || !iccid.textValue().matches("[0-9]{19,20}")) {
-            rejectOrder(value, key, "ICCID must be 19 or 20 digits");
-            return;
+            throw new InvalidSimOrderException("ICCID must be 19 or 20 digits");
         }
         if (msisdn == null || !msisdn.isTextual() || !msisdn.textValue().matches("[1-9][0-9]{0,14}")) {
-            rejectOrder(value, key, "MSISDN must be 1 to 15 digits and start with a nonzero digit");
-            return;
+            throw new InvalidSimOrderException("MSISDN must be 1 to 15 digits and start with a nonzero digit");
         }
         JsonNode orderId = json.get("orderId");
         if (orderId == null || !orderId.isTextual()) {
-            rejectOrder(value, key, "Invalid orderId");
-            return;
+            throw new InvalidSimOrderException("Invalid orderId");
         }
         registerOrdered(new SimOrdered(iccid.textValue(), msisdn.textValue(), orderId.textValue()));
-    }
-
-    private void rejectOrder(byte[] value, byte[] key, String reason) {
-        UUID eventId = UUID.randomUUID();
-        outbox.save(new OutboxEvent(eventId, eventId.toString(), SimOrderedDeadLetter.TOPIC,
-                toJson(new SimOrderedDeadLetter(encode(key), encode(value), reason)), clock.instant(), null));
-    }
-
-    private static String encode(byte[] bytes) {
-        return bytes == null ? null : Base64.getEncoder().encodeToString(bytes);
     }
 
     @Transactional
@@ -103,9 +86,7 @@ public class SimActivationService {
                 sim.iccid(),
                 SIM_ACTIVATED_TOPIC,
                 toJson(new SimActivated(eventId, sim.iccid(), sim.msisdn(), activatedAt)),
-                activatedAt,
-                null,
-                1));
+                activatedAt));
     }
 
     @Transactional
@@ -126,9 +107,7 @@ public class SimActivationService {
                 sim.iccid(),
                 SIM_DEACTIVATED_TOPIC,
                 toJson(new SimDeactivated(eventId, sim.iccid(), sim.msisdn(), deactivatedAt)),
-                deactivatedAt,
-                null,
-                2));
+                deactivatedAt));
     }
 
     private String toJson(Object event) {

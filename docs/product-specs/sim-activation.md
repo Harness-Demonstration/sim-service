@@ -17,7 +17,6 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 | A3 | Activating an unknown ICCID returns 404 and publishes nothing. | done |
 | A4 | An activation and its `sim.activated` event are either both recorded or neither is, even if the database or Kafka fails in the middle. | done |
 | A5 | If Kafka is down, no activation event is lost; it is delivered once Kafka is back, without anyone calling `activate` again. | done |
-| A6 | Two running instances of the service never publish the same event at the same time. | done |
 | A7 | Every `sim.activated` event carries an `eventId` that tells it apart from a duplicate of itself, so billing can ignore duplicates. | done |
 | A8 | Deactivating an active SIM publishes one `sim.deactivated` event with `eventId`, ICCID, MSISDN and the deactivation time from the injected Clock, so billing can stop charging. | done |
 | A9 | Deactivating the same SIM twice publishes once and answers like the first call. | done |
@@ -29,7 +28,8 @@ IDs never change and are never reused. A new criterion takes the next free numbe
 ## Retired criteria
 | ID | Was | Replaced by |
 |---|---|---|
-| (none yet) | | |
+| A6 | Two running instances of the service never publish the same event at the same time. | No replacement: service instances no longer publish. Debezium publishes from the write-ahead log with one connector task; duplicates after a crash are covered by A7. |
 
 ## Decision log
 - 2026-11-10: Events are published through a transactional outbox, see [outbox](../design-docs/outbox.md).
+- 2026-11-13: Debezium publishes the outbox instead of a polling relay; A6 retired.

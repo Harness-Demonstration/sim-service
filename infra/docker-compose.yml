@@ -1,29 +1,102 @@
+# Local stack: PostgreSQL, Kafka, Debezium (Kafka Connect) and Jaeger.
+# billing-service adds its own PostgreSQL to the same compose project (name: harness-lab).
+#   Start:  docker compose up -d --build
+#   Stop:   docker compose stop
+#   Reset:  docker compose down -v   (deletes the databases and Kafka's data)
+name: harness-lab
+
 services:
   postgres:
     image: postgres:16.4
+    # wal_level=logical lets Debezium read row changes from the write-ahead log (WAL).
+    command: ["postgres", "-c", "wal_level=logical"]
+    ports: ["5432:5432"]
     environment:
       POSTGRES_DB: sim
       POSTGRES_USER: sim
       POSTGRES_PASSWORD: sim
-    ports:
-      - "5432:5432"
+    volumes: ["sim-pg:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sim -d sim"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
   kafka:
     image: apache/kafka:3.8.0
     ports: ["9092:9092"]
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # HOST: the services running on your machine (localhost:9092). INTERNAL: other containers (kafka:29092).
+      KAFKA_LISTENERS: HOST://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
-    ports: ["16686:16686", "4318:4318"]
+    ports: ["16686:16686", "4317:4317", "4318:4318"]
+
+  # Kafka Connect with Debezium. Publishes the outbox (docs/design-docs/outbox.md). REST API on localhost:8083.
+  connect:
+    build: ./debezium
+    image: harness-lab/debezium-connect:local
+    ports: ["8083:8083"]
+    depends_on:
+      kafka: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: sim-connect
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      OTEL_SERVICE_NAME: debezium
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Read by the connector through ${env:SIM_DB_PASSWORD}. In production it comes from a secret store.
+      SIM_DB_PASSWORD: sim
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs localhost:8083/connectors >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Creates or updates the connector from debezium/sim-outbox.json. The connector's task fails until sim-service's
+  # migrations created the outbox publication, so this restarts it until it runs, then exits.
+  # Events written before the task runs are not published; start sim-service, then send traffic.
+  connect-setup:
+    image: harness-lab/debezium-connect:local
+    depends_on:
+      connect: {condition: service_healthy}
+    volumes: ["./debezium/sim-outbox.json:/config/sim-outbox.json:ro"]
+    entrypoint:
+      - sh
+      - -c
+      - |
+        url=http://connect:8083/connectors/sim-outbox
+        curl -fsS -o /dev/null -X PUT -H 'Content-Type: application/json' --data @/config/sim-outbox.json $$url/config
+        until curl -fsS $$url/status | grep -q '"tasks":\[{"id":0,"state":"RUNNING"'; do
+          echo "waiting for sim-service to create the outbox publication"
+          sleep 5
+          curl -fsS -o /dev/null -X POST "$$url/restart?includeTasks=true&onlyFailed=true"
+        done
+        echo "connector sim-outbox is running"
+    restart: "no"
+
+volumes:
+  sim-pg:

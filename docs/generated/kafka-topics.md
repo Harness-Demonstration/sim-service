@@ -48,7 +48,7 @@ Messages sim-service consumes and publishes. Change this file before the Java co
 * Message ID: `SimOrderedDeadLetter`
 * Content type: [application/octet-stream](https://www.iana.org/assignments/media-types/application/octet-stream)
 
-Original sim.ordered value bytes and key, unchanged (including a null value). Delivery is at least once; eventId identifies outbox redeliveries. Reprocessing an input record after a consumer restart can create a new eventId.
+Original sim.ordered value bytes and key, unchanged (including a null value). Spring Kafka's dead-letter publisher writes it and may add its own kafka_dlt-* headers. Delivery is at least once; eventId is new for every dead-letter publish, so a record published again after a consumer restart has a different eventId.
 
 
 ##### Headers
@@ -57,7 +57,7 @@ Original sim.ordered value bytes and key, unchanged (including a null value). De
 |---|---|---|---|---|---|
 | (root) | object | - | - | - | **additional properties are allowed** |
 | reason | string | UTF-8 explanation of the rejection. | - | - | **required** |
-| eventId | string | UTF-8 identifier stable across redeliveries. | - | format (`uuid`) | **required** |
+| eventId | string | UTF-8 identifier of this dead-letter publish. | - | format (`uuid`) | **required** |
 
 > Examples of headers _(generated)_
 

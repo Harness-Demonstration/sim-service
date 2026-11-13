@@ -16,6 +16,6 @@ public class SimOrderedConsumer {
 
     @KafkaListener(topics = "sim.ordered", groupId = "sim-service")
     public void onSimOrdered(ConsumerRecord<byte[], byte[]> order) {
-        service.registerOrderedMessage(order.value(), order.key());
+        service.registerOrderedMessage(order.value());
     }
 }

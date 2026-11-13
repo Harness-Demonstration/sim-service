@@ -55,14 +55,15 @@ components:
       contentType: application/octet-stream
       description: >
         Original sim.ordered value bytes and key, unchanged (including a null value).
-        Delivery is at least once; eventId identifies outbox redeliveries. Reprocessing an
-        input record after a consumer restart can create a new eventId.
+        Spring Kafka's dead-letter publisher writes it and may add its own kafka_dlt-* headers.
+        Delivery is at least once; eventId is new for every dead-letter publish, so a record
+        published again after a consumer restart has a different eventId.
       headers:
         type: object
         required: [reason, eventId]
         properties:
           reason: {type: string, description: UTF-8 explanation of the rejection.}
-          eventId: {type: string, format: uuid, description: UTF-8 identifier stable across redeliveries.}
+          eventId: {type: string, format: uuid, description: UTF-8 identifier of this dead-letter publish.}
       payload:
         description: Original Kafka value bytes, which may not be valid JSON or UTF-8, or may be null.
     SimActivated:

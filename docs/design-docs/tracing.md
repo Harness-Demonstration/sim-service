@@ -1,18 +1,34 @@
 # Tracing across the outbox and Kafka
 
 ## Problem
-Spring Kafka adds a W3C `traceparent` header when a message is sent inside a span, and continues the trace when a listener receives it. But events leave through the outbox: the REST activation only writes a row, and the relay sends it later from a scheduled job, outside the activation's trace. Without help, every Kafka message would start a new trace.
+Spring Kafka continues a trace when a listener receives a message with a W3C `traceparent` header. But this service does not send its events to Kafka: it writes an outbox row, and Debezium publishes it later from another process (see `outbox.md`). Without help, every Kafka message would start a new trace, and the time between the commit and the Kafka message would be invisible.
 
 ## Decision
-1. Micrometer Tracing with the OpenTelemetry bridge, exported over OTLP to Jaeger (`management.otlp.tracing.endpoint`, local Jaeger from `infra/docker-compose.yml`). Every request is sampled in this lab.
-2. `spring.kafka.template.observation-enabled` and `spring.kafka.listener.observation-enabled` are on, so Spring Kafka writes and reads `traceparent`.
-3. When an outbox row is written, `PostgresOutboxRepository` asks Micrometer's `Propagator` to inject the current span into a map (W3C `traceparent`, plus `tracestate` and baggage when present) and stores it as JSON in `outbox.trace_context` (migration V5).
-4. `KafkaSimEventPublisher` reads those headers back with `Propagator.extract`, opens a span `outbox relay <topic>` with that parent, and sends inside it. The Kafka producer span and the header therefore belong to the original trace.
-5. Observations of `@Scheduled` runs are switched off (`ObservationConfiguration`); the relay runs every second and would fill Jaeger with empty traces.
+We use Debezium's own tracing support, as described in the Debezium documentation, "Distributed tracing".
 
-Proven by `TracingKafkaTest`: the `traceparent` on `sim.activated` has the trace id of the REST request span, and the producer span's parent is the relay span.
+1. Micrometer Tracing with the OpenTelemetry bridge, exported over OTLP (the OpenTelemetry protocol) to Jaeger (`management.otlp.tracing.endpoint`). Every request is sampled in this lab.
+2. When an outbox row is written, `PostgresOutboxRepository` asks Micrometer's `Propagator` to inject the current span into a `java.util.Properties` and stores it as text in `outbox.tracingspancontext`, for example `traceparent=00-<trace id>-<span id>-01`. Debezium 3.7 reads this column with `Properties.load`; the column name is Debezium's default.
+3. Kafka Connect runs with the OpenTelemetry Java agent (`infra/debezium/Dockerfile`). The agent provides the OpenTelemetry SDK that Debezium's spans need and exports them to Jaeger under the service name `debezium`. All other instrumentation of the agent is switched off, so Connect's own Kafka, database and REST traffic creates no traces.
+4. For each outbox row, Debezium's outbox event router continues the trace from that column and creates two spans:
+   - `db-log-write`: starts at the commit time in PostgreSQL (taken from the WAL record), ends when Debezium has processed the change.
+   - `debezium-read`: starts when Debezium read the change from the WAL.
+
+   It then writes its own span as `traceparent` into the Kafka message headers.
+5. billing-service's Spring Kafka listener reads `traceparent` and continues the same trace.
+
+One trace in Jaeger therefore shows: `sim-service` REST request, `debezium` `db-log-write` and `debezium-read`, then billing-service receiving `sim.activated`.
+
+Proven by `DebeziumOutboxTest.rest_activation_debezium_and_the_kafka_message_form_one_trace`: the `traceparent` on `sim.activated` has the trace id of the REST request span, and its parent span is not one of this service's spans but Debezium's. Without a span context in the row, Debezium writes no `traceparent` at all.
+
+## In production
+The agent is not baked into an image by hand. Two standard ways on Kubernetes:
+- Strimzi: `spec.tracing.type: opentelemetry` on the `KafkaConnect` resource, with `OTEL_SERVICE_NAME` and `OTEL_EXPORTER_OTLP_ENDPOINT` in `spec.template.connectContainer.env` (Strimzi documentation, "Introducing distributed tracing").
+- OpenTelemetry Operator: an `Instrumentation` resource and the pod annotation `instrumentation.opentelemetry.io/inject-java: "true"`; the operator adds the agent through an init container (OpenTelemetry documentation, "Injecting auto-instrumentation").
+
+The service side (the `tracingspancontext` column) and the connector configuration stay the same.
 
 ## Sources
-- Debezium outbox event router: a `tracingspancontext` column carries the span context from the service that writes the outbox row to the component that publishes it.
-- Spring for Apache Kafka reference, "Monitoring": observation on `KafkaTemplate` and listener containers, propagation through Micrometer Tracing.
-- Spring Boot reference, "Tracing": Micrometer Tracing with the OpenTelemetry bridge and the OTLP exporter; `@AutoConfigureObservability` turns tracing on in tests.
+- Debezium documentation, "Distributed tracing" and "Outbox event router": `tracing.span.context.field`, the `java.util.Properties` format, the `db-log-write` and `debezium-read` spans, `ENABLE_OTEL` in the container image.
+- Debezium source code, `io.debezium.transforms.tracing.TracingSpanUtil` (3.7.1.Final): span names and start times.
+- Spring for Apache Kafka reference, "Monitoring": observation on listener containers, propagation through Micrometer Tracing.
+- Spring Boot reference, "Tracing": Micrometer Tracing with the OpenTelemetry bridge; `@AutoConfigureObservability` turns tracing on in tests.

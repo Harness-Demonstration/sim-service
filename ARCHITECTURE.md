@@ -12,7 +12,6 @@ The one hard problem is that announcement: billing must never miss an activation
 
 - `SimOrderedConsumer`: Kafka listener for `sim.ordered`.
 - `SimActivationController`: `POST /sims/{iccid}/activate` and `POST /sims/{iccid}/deactivate`.
-- `OutboxRelay`: scheduled job that publishes pending outbox rows to Kafka.
 
 ## Code Map
 
@@ -24,7 +23,7 @@ Plain records shared by all layers: `Sim`, the incoming `SimOrdered`, the outgoi
 
 ### `config`
 
-Spring beans: the `Clock` used everywhere instead of `Instant.now()`, and scheduling for the relay.
+Spring beans: the `Clock` used everywhere instead of `Instant.now()`.
 
 **Architecture Invariant:** no code calls `Instant.now()`; time comes from the injected `Clock`. Enforced by `LayerRulesTest.no_wall_clock`.
 
@@ -38,13 +37,13 @@ Persistence behind interfaces that `service` uses: `SimRepository` and `OutboxRe
 
 ### `service`
 
-Every business decision. `SimActivationService` registers ordered SIMs and activates them: it locks the SIM row, sets the activation time and writes the outbox row in one transaction. `OutboxRelayService` selects pending outbox rows, hands them to a publisher and marks the acknowledged ones as sent.
+Every business decision. `SimActivationService` registers ordered SIMs and activates them: it locks the SIM row, sets the activation time and writes the outbox row in one transaction. A sim.ordered message it cannot register raises `InvalidSimOrderException` with the reason.
 
-**Architecture Invariant:** `service` never talks to Kafka. It sees only the `SimEventPublisher` interface, implemented in `stream`. Enforced by `LayerRulesTest.service_does_not_use_kafka`.
+**Architecture Invariant:** `service` never talks to Kafka. Events leave through the outbox, which Debezium publishes. Enforced by `LayerRulesTest.service_does_not_use_kafka`.
 
 ### `stream`
 
-Kafka in both directions. `SimOrderedConsumer` turns a message into a `SimOrdered` record and calls one service method. `KafkaSimEventPublisher` sends outbox payloads and returns Kafka's acknowledgement. `OutboxRelay` triggers the relay every second.
+Kafka in both directions. `SimOrderedConsumer` turns a message into a `SimOrdered` record and calls one service method. `SimOrderedErrorHandling` sends rejected sim.ordered messages to `sim.ordered.dlt` unchanged, with the reason in a header, and retries every other failure.
 
 **Architecture Invariant:** no business logic here, and no access to `repository`. Enforced by `LayerRulesTest`.
 
@@ -58,7 +57,7 @@ REST. `SimActivationController` translates the request and calls the service; `S
 
 ### Events and delivery
 
-Every event goes through the outbox. Delivery is at least once; every `sim.activated` and `sim.deactivated` carries an `eventId` so consumers can drop duplicates. Changing the shape of a published message affects other services and must be called out in the pull request.
+Every event goes through the outbox and is published by Debezium from PostgreSQL's write-ahead log. Delivery is at least once; every `sim.activated` and `sim.deactivated` carries an `eventId` so consumers can drop duplicates. Changing the shape of a published message affects other services and must be called out in the pull request.
 
 ### Testing
 
@@ -66,12 +65,12 @@ Business rules are tested in `service` with in-class fakes and a fixed `Clock`. 
 
 ### Error handling
 
-Unknown SIMs raise `SimNotFoundException`, mapped to 404. A failed Kafka send never fails an activation; the outbox row stays pending and the relay retries it.
+Unknown SIMs raise `SimNotFoundException`, mapped to 404. Kafka being down never fails an activation; Debezium publishes the event once Kafka is back.
 
 ### Observability
 
-Micrometer Tracing with OpenTelemetry, exported to Jaeger. The span that writes an outbox row is stored with it, and the relay continues that trace when it publishes, so one trace runs from the REST request through Kafka into billing (see `docs/design-docs/tracing.md`).
+Micrometer Tracing with OpenTelemetry, exported to Jaeger. The span that writes an outbox row is stored with it, and Debezium continues that trace with its own spans, so one trace runs from the REST request through Debezium and Kafka into billing (see `docs/design-docs/tracing.md`).
 
 ### Configuration
 
-Database and Kafka addresses come from environment variables with local defaults (`application.yml`). The relay can be switched off with `sim.outbox.relay.enabled=false`. Local PostgreSQL, Kafka and Jaeger start from `infra/docker-compose.yml`.
+Database and Kafka addresses come from environment variables with local defaults (`application.yml`). Local PostgreSQL, Kafka, Debezium and Jaeger start from `infra/docker-compose.yml`; the Debezium image and connector configuration are in `infra/debezium/`.

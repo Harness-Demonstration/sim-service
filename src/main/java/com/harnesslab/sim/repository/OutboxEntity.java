@@ -20,9 +20,6 @@ public class OutboxEntity {
     @Column(name = "aggregate_id", nullable = false, length = 64)
     private String aggregateId;
 
-    @Column(name = "aggregate_sequence", nullable = false)
-    private long aggregateSequence;
-
     @Column(nullable = false, length = 128)
     private String topic;
 
@@ -33,27 +30,17 @@ public class OutboxEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "sent_at")
-    private Instant sentAt;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "trace_context")
-    private String traceContext;
+    @Column(name = "tracingspancontext")
+    private String tracingSpanContext;
 
     protected OutboxEntity() {}
 
-    OutboxEntity(OutboxEvent event, String traceContext) {
+    OutboxEntity(OutboxEvent event, String tracingSpanContext) {
         this.id = event.id();
         this.aggregateId = event.aggregateId();
-        this.aggregateSequence = event.aggregateSequence();
         this.topic = event.topic();
         this.payload = event.payload();
         this.createdAt = event.createdAt();
-        this.sentAt = event.sentAt();
-        this.traceContext = traceContext;
-    }
-
-    OutboxEvent toDomain() {
-        return new OutboxEvent(id, aggregateId, topic, payload, createdAt, sentAt, aggregateSequence, traceContext);
+        this.tracingSpanContext = tracingSpanContext;
     }
 }

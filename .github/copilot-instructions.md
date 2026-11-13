@@ -21,7 +21,8 @@ Stack: Java 17, Spring Boot 3.3, Spring Data JPA, Flyway, PostgreSQL 16, Spring 
 | Known gaps we chose not to fix yet | `docs/exec-plans/tech-debt-tracker.md` |
 | Message shapes of `sim.ordered` and `sim.activated` | `docs/contracts/sim-events.asyncapi.yaml` |
 | How a trace continues through the outbox and Kafka | `docs/design-docs/tracing.md` |
-| Local PostgreSQL, Kafka and Jaeger | `infra/docker-compose.yml` |
+| Local PostgreSQL, Kafka, Debezium and Jaeger | `infra/docker-compose.yml` |
+| Debezium image and connector configuration | `infra/debezium/` |
 
 ## How to work
 1. If the issue adds or changes lasting behaviour that customers or other services rely on, write it into the matching spec in `docs/product-specs/` first, with the next free ID, and retire criteria that no longer hold. Technical decisions go to `ARCHITECTURE.md` or `docs/design-docs/`. All other acceptance criteria stay in the issue and are proven by tests.
