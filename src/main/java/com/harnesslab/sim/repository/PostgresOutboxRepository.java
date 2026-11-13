@@ -1,66 +1,65 @@
 package com.harnesslab.sim.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harnesslab.sim.types.OutboxEvent;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
+import java.util.Properties;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Outbox as Debezium expects it (docs/design-docs/outbox.md): the row is inserted and deleted again in the caller's
+ * transaction. Debezium reads the insert from the write-ahead log and ignores the delete, so the table stays empty.
+ */
 @Repository
 public class PostgresOutboxRepository implements OutboxRepository {
 
     private final JpaOutboxEntityRepository jpaRepository;
     private final Tracer tracer;
     private final Propagator propagator;
-    private final ObjectMapper objectMapper;
 
-    /** Without tracing (for example in tests) there is no Propagator bean; Propagator.NOOP writes no headers. */
+    /** Without tracing (for example in tests) there is no Propagator bean; Propagator.NOOP writes no context. */
     public PostgresOutboxRepository(
-            JpaOutboxEntityRepository jpaRepository,
-            Tracer tracer,
-            ObjectProvider<Propagator> propagator,
-            ObjectMapper objectMapper) {
+            JpaOutboxEntityRepository jpaRepository, Tracer tracer, ObjectProvider<Propagator> propagator) {
         this.jpaRepository = jpaRepository;
         this.tracer = tracer;
         this.propagator = propagator.getIfAvailable(() -> Propagator.NOOP);
-        this.objectMapper = objectMapper;
     }
 
-    /** A new row stores the trace headers of the current span; an existing row keeps the ones it has. */
     @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public void save(OutboxEvent event) {
-        String traceContext = event.traceContext() != null ? event.traceContext() : currentTraceContext();
-        jpaRepository.save(new OutboxEntity(event, traceContext));
+        OutboxEntity row = new OutboxEntity(event, currentSpanContext());
+        // Flush so the INSERT is executed before the DELETE; Debezium needs the insert in the write-ahead log.
+        jpaRepository.saveAndFlush(row);
+        jpaRepository.delete(row);
     }
 
-    @Override
-    public List<OutboxEvent> lockPending(int limit) {
-        return jpaRepository.findPending(PageRequest.of(0, limit)).stream()
-                .map(OutboxEntity::toDomain)
-                .toList();
-    }
-
-    private String currentTraceContext() {
+    /** The current span as java.util.Properties text ("traceparent=00-..."), the format Debezium 3.7 reads. */
+    private String currentSpanContext() {
         Span span = tracer.currentSpan();
         if (span == null) {
             return null;
         }
-        Map<String, String> headers = new LinkedHashMap<>();
-        propagator.inject(span.context(), headers, Map::put);
-        if (headers.isEmpty()) {
+        Properties context = new Properties();
+        propagator.inject(span.context(), context, Properties::setProperty);
+        if (context.isEmpty()) {
             return null;
         }
+        StringWriter text = new StringWriter();
         try {
-            return objectMapper.writeValueAsString(headers);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Cannot serialize trace headers", exception);
+            context.store(text, null);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
         }
+        // Properties.store starts with a date comment; Debezium ignores it, but the column is easier to read without.
+        return text.toString().lines().filter(line -> !line.startsWith("#")).collect(Collectors.joining("\n"));
     }
 }

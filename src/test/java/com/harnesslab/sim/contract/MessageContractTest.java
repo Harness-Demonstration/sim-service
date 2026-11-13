@@ -43,17 +43,7 @@ class MessageContractTest {
     @Test
     void sim_activated_as_sent_matches_the_contract() throws Exception {
         List<OutboxEvent> saved = new ArrayList<>();
-        OutboxRepository outbox = new OutboxRepository() {
-            @Override
-            public void save(OutboxEvent event) {
-                saved.add(event);
-            }
-
-            @Override
-            public List<OutboxEvent> lockPending(int limit) {
-                return List.of();
-            }
-        };
+        OutboxRepository outbox = saved::add;
         Clock clock = Clock.fixed(Instant.parse("2026-01-02T03:04:05Z"), ZoneOffset.UTC);
         new SimActivationService(new SingleSimRepository(new Sim(ICCID, MSISDN, null)), outbox, springObjectMapper(), clock)
                 .activate(ICCID);
@@ -67,17 +57,7 @@ class MessageContractTest {
     @Test
     void sim_deactivated_as_sent_matches_the_contract() throws Exception {
         List<OutboxEvent> saved = new ArrayList<>();
-        OutboxRepository outbox = new OutboxRepository() {
-            @Override
-            public void save(OutboxEvent event) {
-                saved.add(event);
-            }
-
-            @Override
-            public List<OutboxEvent> lockPending(int limit) {
-                return List.of();
-            }
-        };
+        OutboxRepository outbox = saved::add;
         Clock clock = Clock.fixed(Instant.parse("2026-01-02T03:04:05Z"), ZoneOffset.UTC);
         Sim activatedSim = new Sim(ICCID, MSISDN, Instant.parse("2026-01-01T03:04:05Z"));
         new SimActivationService(new SingleSimRepository(activatedSim), outbox, springObjectMapper(), clock)

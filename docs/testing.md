@@ -11,14 +11,16 @@
 |---|---|---|
 | Unit | plain JUnit, fakes declared inside the test class, fixed `Clock` | business rules in `service` |
 | Repository and outbox | real PostgreSQL from Testcontainers, Flyway migrations applied | anything that touches SQL or transactions |
-| Kafka integration | real Kafka from Testcontainers | the relay and consumers |
+| Outbox | real PostgreSQL with `wal_level=logical`, read through the `test_decoding` plugin | what a state change writes to the write-ahead log (`OutboxPersistenceTest`) |
+| Kafka integration | real Kafka from Testcontainers | consumers and the dead-letter topic |
+| Debezium end to end | PostgreSQL, Kafka and the image from `infra/debezium` on one Docker network, connector from `infra/debezium/sim-outbox.json` | publishing, ordering, Kafka outages and tracing (`DebeziumOutboxTest`) |
 | Contract | JSON Schema from the AsyncAPI contract, `MessageContractTest` | every message shape the service sends or reads |
 | Consumer contract | CI job `consumer-contracts` runs billing-service's `MessageContractTest` against this pull request's contract | a contract change that breaks billing-service |
 | Architecture | ArchUnit in `LayerRulesTest` | every build |
 
 ## Testcontainers
 - The version comes from the `testcontainers.version` property in `pom.xml` (1.21.4 or later). Never write a version on the individual dependencies; older versions cannot talk to the Docker Engine on GitHub runners.
-- Images are pinned and match `infra/docker-compose.yml`: `postgres:16.4`, `apache/kafka:3.8.0`.
+- Images are pinned and match `infra/docker-compose.yml`: `postgres:16.4`, `apache/kafka:3.8.0`, and the Debezium image built from `infra/debezium/Dockerfile`.
 - Tests need Docker. `./mvnw verify` starts the containers itself.
 
 ## Test data
