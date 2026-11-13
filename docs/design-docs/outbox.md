@@ -56,7 +56,7 @@ At least once. Debezium stores how far it has read (the offset) in Kafka. If Kaf
 - Debezium creates the replication slot when the connector first runs. Events committed before that are never published, because their rows are already deleted. Deploy and start the connector before the first release that writes events; afterwards the slot keeps everything while the connector is down.
 - Watch the replication slot: `pg_replication_slots.active` must be true, and the WAL kept for it must not grow without limit. A slot nobody reads can fill the database disk.
 - Watch the connector: `GET /connectors/sim-outbox/status` on Kafka Connect must show the connector and its task as `RUNNING`.
-- In production the database user, the publication and the password come from the platform (a dedicated replication user, a publication created by a migration or a DBA, secrets from Kafka Connect config providers), not from the JSON file in this repository.
+- The connector configuration holds no password: `database.password` is `${env:SIM_DB_PASSWORD}`, resolved by Kafka Connect's `EnvVarConfigProvider` when the connector starts, so the Connect REST API shows only the reference. Locally the value is set in `infra/docker-compose.yml`; in production it comes from a secret store (with Strimzi, a Kubernetes secret). Use a dedicated database user with the replication privilege rather than the service's own user.
 
 ## Tests expected for any new event
 - The state change and the outbox insert reach the WAL together, and a failing outbox insert leaves no state change and nothing in the WAL (`OutboxPersistenceTest`, PostgreSQL's `test_decoding` plugin).

@@ -68,6 +68,8 @@ services:
       STATUS_STORAGE_REPLICATION_FACTOR: 1
       OTEL_SERVICE_NAME: debezium
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Read by the connector through ${env:SIM_DB_PASSWORD}. In production it comes from a secret store.
+      SIM_DB_PASSWORD: sim
     healthcheck:
       test: ["CMD-SHELL", "curl -fs localhost:8083/connectors >/dev/null"]
       interval: 5s

@@ -23,3 +23,8 @@ ENV ENABLE_OTEL=true \
     OTEL_PROPAGATORS=tracecontext \
     OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED=false \
     OTEL_INSTRUMENTATION_OPENTELEMETRY_API_ENABLED=true
+
+# Connector configurations may read secrets from environment variables, for example
+# "database.password": "${env:SIM_DB_PASSWORD}", so passwords are not stored in the connector configuration.
+ENV CONNECT_CONFIG_PROVIDERS=env \
+    CONNECT_CONFIG_PROVIDERS_ENV_CLASS=org.apache.kafka.common.config.provider.EnvVarConfigProvider

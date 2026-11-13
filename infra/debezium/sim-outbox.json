@@ -3,7 +3,7 @@
   "database.hostname": "postgres",
   "database.port": "5432",
   "database.user": "sim",
-  "database.password": "sim",
+  "database.password": "${env:SIM_DB_PASSWORD}",
   "database.dbname": "sim",
   "topic.prefix": "sim",
   "plugin.name": "pgoutput",

@@ -91,6 +91,7 @@ class DebeziumOutboxTest {
                     "OTEL_SERVICE_NAME", "debezium",
                     // Spans are created and their context is put on the message; there is no Jaeger to export to.
                     "OTEL_TRACES_EXPORTER", "none"))
+            .withEnv("SIM_DB_PASSWORD", "sim")
             .dependsOn(KAFKA, POSTGRES)
             .waitingFor(Wait.forHttp("/connectors").forPort(8083).withStartupTimeout(Duration.ofMinutes(3)));
 
