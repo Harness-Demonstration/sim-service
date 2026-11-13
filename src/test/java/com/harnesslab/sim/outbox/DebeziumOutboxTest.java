@@ -19,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -154,8 +153,9 @@ class DebeziumOutboxTest {
         assertEquals(iccid, event.get("iccid").asText());
         assertEquals("491700000031", event.get("msisdn").asText());
         Instant activatedAt = jdbc.queryForObject("select activated_at from sim where iccid = ?", Instant.class, iccid);
-        // PostgreSQL keeps microseconds; the event carries the Clock's full precision (nanoseconds on Linux).
-        assertEquals(activatedAt, Instant.parse(event.get("activatedAt").asText()).truncatedTo(ChronoUnit.MICROS));
+        // PostgreSQL rounds to microseconds; the event carries the Clock's full precision (nanoseconds on Linux).
+        Duration difference = Duration.between(activatedAt, Instant.parse(event.get("activatedAt").asText())).abs();
+        assertTrue(difference.compareTo(Duration.ofNanos(1_000)) <= 0, () -> "activatedAt differs by " + difference);
         assertEquals(event.get("eventId").asText(), header(record, "id"));
         assertEquals(0, jdbc.queryForObject("select count(*) from outbox", Integer.class));
     }
